@@ -1,0 +1,92 @@
+FROM php:8.4-apache
+
+RUN apt update
+
+ARG ARG_UID
+ARG ARG_GID
+
+# Xdebug 3.4.3
+# Release date: 2025-05-14
+RUN pecl channel-update pecl.php.net \
+  && pecl install xdebug-3.4.3 \
+  && docker-php-ext-enable xdebug \
+  && echo "xdebug.mode=debug" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
+  && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
+  && echo "xdebug.discover_client_host=1" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+#  && echo "xdebug.client_host=host.docker.internal" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+RUN apt install -y zip unzip libzip-dev   # libzip-dev for php-ext zip
+RUN docker-php-ext-install zip                # for Composer and others
+
+#RUN apt install -y libxml2-dev
+#RUN docker-php-ext-install soap
+
+RUN apt install -y libgd-dev libfreetype6-dev libjpeg62-turbo-dev libpng-dev
+RUN docker-php-ext-configure gd --with-freetype=/usr/include/ --with-jpeg=/usr/include/
+RUN docker-php-ext-install gd
+
+RUN apt install -y libicu-dev \
+  && docker-php-ext-configure intl \
+  && docker-php-ext-install intl
+
+RUN apt install -y locales
+RUN echo -e "cs_CZ.UTF-8 UTF-8\nde_DE.UTF-8 UTF-8\nen_US.UTF-8 UTF-8" | tee /etc/locale.gen
+RUN locale-gen
+
+RUN docker-php-ext-install gettext
+
+RUN docker-php-ext-install mysqli
+
+#RUN docker-php-ext-install calendar
+
+#RUN apt install -y libc-client-dev libkrb5-dev
+#RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl
+#RUN docker-php-ext-install imap
+
+#RUN docker-php-ext-install bcmath
+
+#RUN apt install -y libmemcached-dev zlib1g-dev
+#RUN pecl install memcached \
+#  && docker-php-ext-enable memcached
+
+#RUN docker-php-ext-install exif
+
+RUN docker-php-ext-install pdo_mysql
+RUN #docker-php-ext-install mysqli pdo_mysql
+
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+RUN apt install bash-completion
+RUN composer completion bash > ~/.composer-completion.bash
+
+# mysql and mysql-dump for refreshing the database
+RUN apt install -y default-mysql-client
+
+RUN apt install -y mc less
+
+RUN bash -c 'openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/shoptet-log-parser.key \
+  -out /etc/ssl/certs/shoptet-log-parser.crt \
+  -subj "/C=CZ/L=Prague/O=Packeta/OU=IT/CN=shoptet-log-parser.local" \
+  -extensions v3_req \
+  -config <(cat /etc/ssl/openssl.cnf <(printf "\n[v3_req]\nsubjectAltName=DNS:shoptet-log-parser.local,DNS:localhost"))'
+
+RUN a2enmod rewrite ssl
+
+RUN userdel -f www-data &&\
+  if getent group www-data ; then groupdel www-data; fi &&\
+  groupadd -g ${ARG_GID} www-data &&\
+  useradd -l -u ${ARG_UID} -g www-data www-data &&\
+  install -d -m 0755 -o www-data -g www-data /home/www-data
+
+RUN echo 'alias lla="ls -la"' >> ~/.bashrc
+RUN echo 'alias ll="ls -l"' >> ~/.bashrc
+RUN echo '[[ $BASH_VERSION ]] && . /usr/share/bash-completion/bash_completion' >> ~/.bashrc
+RUN echo 'source ~/.composer-completion.bash' >> ~/.bashrc
+
+RUN cp ~/.bashrc /home/www-data/.bashrc
+RUN cp ~/.composer-completion.bash /home/www-data/.composer-completion.bash
+
+RUN chown www-data:www-data /home/www-data/.bashrc
+
+RUN apt clean -y
