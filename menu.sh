@@ -133,7 +133,7 @@ while true; do
     5)
       echo -e "${YELLOW}Zadejte PHP příkaz:${NC}"
       read -e php_cmd
-      $DC exec web-php-8.4 su --shell /bin/bash www-data --command "php $php_cmd"
+      $DC exec prestashop su --shell /bin/bash www-data --command "php $php_cmd"
       ;;
     6)
       echo -e "${YELLOW}Zadejte PHP příkaz s Xdebug:${NC}"
