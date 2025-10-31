@@ -5,3 +5,9 @@ https://devdocs.prestashop-project.org/8/
 
 Versions
 https://prestashop.com/versions
+
+PrestaShop Docker
+https://github.com/PrestaShop/docker/tree/master
+
+PrestaShop Docker hub
+https://hub.docker.com/r/prestashop/prestashop/
