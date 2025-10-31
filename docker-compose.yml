@@ -32,10 +32,10 @@ services:
 #      PS_ENABLE_SSL: 1
       PS_LANGUAGE: ${PS_LANGUAGE:-en}
       PS_COUNTRY: ${PS_COUNTRY:-CZ}
-      #PS_ALL_LANGUAGES: 1 # Install all the existing languages for the current version
+      PS_ALL_LANGUAGES: ${PS_ALL_LANGUAGES:-1} # Install all the existing languages for the current version
 
-#      ADMIN_MAIL	Override default admin email	demo@prestashop.com
-#      ADMIN_PASSWD	Override default admin password	prestashop_demo
+      ADMIN_MAIL: ${ADMIN_MAIL:-demo@prestashop.com} # Override default admin email: demo@prestashop.com
+      ADMIN_PASSWD:	${ADMIN_PASSWD:-prestashop_demo} #Override default admin password: prestashop_demo
 
       PS_DEV_MODE: ${PS_DEV_MODE:-1}
       PS_FOLDER_ADMIN: ${PS_FOLDER_ADMIN:-admin} # Change the name of the admin folder 	admin
