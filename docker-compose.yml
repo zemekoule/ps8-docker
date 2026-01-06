@@ -79,25 +79,6 @@ services:
     networks:
       - prestashop_network
 
-#  mysql:
-#    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
-#    container_name: dev_db
-#    image: mysql:5.7
-#    restart: unless-stopped
-#    environment:
-#      MYSQL_DATABASE: prestashop
-#      MYSQL_ROOT_PASSWORD: asdf
-#      TZ: Europe/Prague
-#    volumes:
-#      - ./db:/var/lib/mysql
-#    ports:
-#      - 3308:3306
-#    networks:
-#      - prestashop_network
-
-#    # this enables logging all queries to a file in the db directory - comment out this whole line to disable
-#    command: mysqld --general-log=1 --general-log-file=general-log.log
-
   mailpit:
     image: axllent/mailpit
     container_name: mailpit
