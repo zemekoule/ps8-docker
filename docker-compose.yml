@@ -21,32 +21,25 @@ services:
       - mysql
     ports:
       - "8080:80"
-#      - 443:443
 
     environment:
       DB_SERVER: dev_db
       DB_NAME: prestashop
       DB_USER: root
       DB_PASSWD: asdf
-
-#      PS_ENABLE_SSL: 1
       PS_LANGUAGE: ${PS_LANGUAGE:-en}
       PS_COUNTRY: ${PS_COUNTRY:-CZ}
       PS_ALL_LANGUAGES: ${PS_ALL_LANGUAGES:-1} # Install all the existing languages for the current version
-
       ADMIN_MAIL: ${ADMIN_MAIL:-demo@prestashop.com} # Override default admin email: demo@prestashop.com
       ADMIN_PASSWD:	${ADMIN_PASSWD:-prestashop_demo} #Override default admin password: prestashop_demo
-
       PS_DEV_MODE: ${PS_DEV_MODE:-1}
-      PS_FOLDER_ADMIN: ${PS_FOLDER_ADMIN:-admin} # Change the name of the admin folder 	admin
-
+      PS_FOLDER_ADMIN: ${PS_FOLDER_ADMIN:-admin} # Change the name of the admin folder admin
       # auto-install with test data
       # http://localhost:8080 with the front office containing the demo products and http://localhost:8080/admin for the back office.
       PS_INSTALL_AUTO: ${PS_INSTALL_AUTO:-1}
       PS_DOMAIN: localhost:8080
-#      PS_ERASE_DB: 1
+      #      PS_ERASE_DB: 1
       PS_INSTALL_DB: ${PS_INSTALL_DB:-0}
-
       # value in PhpStorm Settings/PHP/Servers; useful when debugging CLI scripts from within the container, not from PhpStorm
       PHP_IDE_CONFIG: "serverName=prestashop.local"
 
