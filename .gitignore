@@ -4,3 +4,8 @@
 /mailpit/
 /modules/
 /src/
+/CLAUDE.md
+/.notes/
+/.claude/worktrees/
+/.claude/settings.local.json
+.DS_Store
