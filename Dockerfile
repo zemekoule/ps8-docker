@@ -13,7 +13,8 @@ RUN mkdir -p /tmp/data-ps \
 	&& rm /tmp/prestashop.zip
 
 # Install Xdebug via pecl
-RUN pecl install xdebug
+# Pinned to 3.4.5: 3.5.x segfaults on PrestaShop admin (Symfony deep call stack) with PHP 8.1.
+RUN pecl install xdebug-3.4.5
 #     \
 #    && docker-php-ext-enable xdebug
 
