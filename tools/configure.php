@@ -64,7 +64,7 @@ $ctx = (object) [
 $steps = [
     'module-essentials' => 'step_module_essentials', // F2-2: API heslo, eshop id, COD platby
     'locations'         => 'step_locations', // F2-3: zóny → země (enforce exact set)
-    'carriers'          => null, // F2-4: PS dopravci → cron download → přiřazení
+    'carriers'          => 'step_carriers', // F2-4: PS dopravci → cron download → přiřazení
     'products'          => null, // F2-5: seed produktů (+ adult)
 ];
 
@@ -211,6 +211,50 @@ function step_locations(object $ctx): void
         }
     }
     echo "    zón smazáno (mimo profil): $deletedZones\n";
+}
+
+/**
+ * F2-4 (část 1) — stažení Zásilkovna dopravců (cron přes DI) + výpis dostupných.
+ * PS dopravci (create/delete) + mapování = část 2 (až podle reálných dat).
+ * Vyžaduje PACKETERY_APIPASS (volá prod API).
+ */
+function step_carriers(object $ctx): void
+{
+    if ($ctx->secrets['apipass'] === '') {
+        echo "    carriers: přeskočeno (chybí PACKETERY_APIPASS v .env — cron download nelze)\n";
+        return;
+    }
+
+    // 1. Cron download dostupných dopravců → ps_packetery_carriers (přes modulový DI, bez HTTP/tokenu)
+    if (!$ctx->dryRun) {
+        $task   = $ctx->di->get(\Packetery\Cron\Tasks\DownloadCarriers::class);
+        $errors = $task->execute();
+        if (!empty($errors)) {
+            echo "    ⚠ download dopravců vrátil chyby: " . json_encode($errors, JSON_UNESCAPED_UNICODE) . "\n";
+        } else {
+            echo "    cron download dopravců OK\n";
+        }
+    }
+
+    // 2. Výpis dostupných dopravců pro deklarované země (pro návrh mapování)
+    $isos = [];
+    foreach ($ctx->profile['locations']['countries'] ?? [] as $c) {
+        $isos[] = strtoupper($c['iso']);
+    }
+    if ($isos) {
+        $repo  = $ctx->di->get(\Packetery\ApiCarrier\ApiCarrierRepository::class);
+        $avail = $repo->getByCountries($isos);
+        echo "    dostupných Zásilkovna dopravců pro [" . implode(',', $isos) . "]: " . count($avail) . "\n";
+        foreach (array_slice($avail, 0, 12) as $c) {
+            $id   = $c['id'] ?? $c['id_branch'] ?? '?';
+            $name = $c['name'] ?? '?';
+            $ctry = $c['country'] ?? '';
+            echo "      - [$id] $name ($ctry)\n";
+        }
+    }
+
+    // 3. PS dopravci (create/delete) + mapování Zásilkovna↔PS — F2-4 část 2 (TODO podle reálných dat).
+    echo "    (PS dopravci + mapování: F2-4 část 2 — až podle reálných dat)\n";
 }
 
 /* ============================ helpers ====================================== */
