@@ -63,7 +63,7 @@ $ctx = (object) [
 // Každý krok = [název => callable(ctx)]. Doplní se v F2-2..F2-5.
 $steps = [
     'module-essentials' => 'step_module_essentials', // F2-2: API heslo, eshop id, COD platby
-    'locations'         => null, // F2-3: zóny → země (enforce exact set)
+    'locations'         => 'step_locations', // F2-3: zóny → země (enforce exact set)
     'carriers'          => null, // F2-4: PS dopravci → cron download → přiřazení
     'products'          => null, // F2-5: seed produktů (+ adult)
 ];
@@ -127,6 +127,90 @@ function step_module_essentials(object $ctx): void
     } else {
         echo "    COD: žádné platby v profilu\n";
     }
+}
+
+/**
+ * F2-3 — lokace: zóny + země, "enforce exact set" (deklaruješ → skript srovná).
+ * Pořadí: zajistit deklarované zóny → srovnat země (active + id_zone) → smazat nedeklarované zóny.
+ * Vše přes Zone/Country ObjectModely (veřejné PS API), idempotentní.
+ */
+function step_locations(object $ctx): void
+{
+    $loc           = $ctx->profile['locations'] ?? [];
+    $declZones     = $loc['zones'] ?? [];
+    $declCountries = $loc['countries'] ?? [];
+    if (!$declZones && !$declCountries) {
+        echo "    lokace: profil prázdný, přeskočeno\n";
+        return;
+    }
+
+    // 1. Zajistit deklarované zóny → mapa name→id
+    $zoneId = [];
+    foreach (\Zone::getZones(false) as $z) {
+        $zoneId[$z['name']] = (int) $z['id_zone'];
+    }
+    foreach ($declZones as $name) {
+        if (!isset($zoneId[$name])) {
+            if (!$ctx->dryRun) {
+                $z = new \Zone();
+                $z->name   = $name;
+                $z->active = true;
+                $z->add();
+                $zoneId[$name] = (int) $z->id;
+            }
+            echo "    zóna vytvořena: $name\n";
+        }
+    }
+
+    // 2. Země — enforce exact set (deklarované active + id_zone; ostatní deactivate)
+    $idLang   = (int) \Configuration::get('PS_LANG_DEFAULT');
+    $declIso  = [];
+    foreach ($declCountries as $c) {
+        $iso = strtoupper($c['iso']);
+        $declIso[] = $iso;
+        $id = (int) \Country::getByIso($iso);
+        if (!$id) {
+            echo "    ⚠ země $iso neexistuje, přeskočeno\n";
+            continue;
+        }
+        if (!$ctx->dryRun) {
+            $country = new \Country($id);
+            $country->active  = true;
+            if (isset($c['zone'], $zoneId[$c['zone']])) {
+                $country->id_zone = $zoneId[$c['zone']];
+            }
+            $country->save();
+        }
+        echo "    země aktivní: $iso → zóna " . ($c['zone'] ?? '?') . "\n";
+    }
+    $deactivated = 0;
+    foreach (\Country::getCountries($idLang, false) as $c) {
+        if (!empty($c['active']) && !in_array(strtoupper($c['iso_code']), $declIso, true)) {
+            if (!$ctx->dryRun) {
+                $cc = new \Country((int) $c['id_country']);
+                $cc->active = false;
+                $cc->save();
+            }
+            $deactivated++;
+        }
+    }
+    echo "    země deaktivováno (mimo profil): $deactivated\n";
+
+    // 3. Smazat nedeklarované zóny (až po přeřazení zemí)
+    $deletedZones = 0;
+    foreach (\Zone::getZones(false) as $z) {
+        if (!in_array($z['name'], $declZones, true)) {
+            try {
+                if (!$ctx->dryRun) {
+                    (new \Zone((int) $z['id_zone']))->delete();
+                }
+                $deletedZones++;
+            } catch (\Throwable $e) {
+                echo "    ⚠ zóna '{$z['name']}' nešla smazat: " . $e->getMessage() . "\n";
+            }
+        }
+    }
+    echo "    zón smazáno (mimo profil): $deletedZones\n";
 }
 
 /* ============================ helpers ====================================== */

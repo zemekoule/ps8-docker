@@ -13,10 +13,16 @@ module:
 cod_payments:
   - ps_cashondelivery
 
-# Lokace (F2-3). Pořadí aplikace: zóny → země.
+# Lokace (F2-3). "enforce exact set": jen tyto zóny/země zůstanou aktivní, zbytek se srovná.
+# Pořadí aplikace: zóny → země (active + zóna) → smazání nedeklarovaných zón.
+# Uprav podle toho, které země zrovna testuješ.
 locations:
-  zones: []        # např. [{ name: "Česká republika" }, { name: "Slovensko" }]
-  countries: []    # např. [{ iso: CZ, zone: "Česká republika" }, { iso: SK, zone: "Slovensko" }]
+  zones:
+    - "Česká republika"
+    - "Slovensko"
+  countries:
+    - { iso: CZ, zone: "Česká republika" }
+    - { iso: SK, zone: "Slovensko" }
 
 # PS dopravci + mapování na Zásilkovna dopravce (F2-4).
 carriers: []
