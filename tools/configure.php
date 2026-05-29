@@ -316,6 +316,10 @@ function create_ps_carrier(string $name, array $zoneIds, int $idLang): int
     $c->delay             = [$idLang => 'Zásilkovna'];
     $c->add();
 
+    // Přiřadit všechny skupiny zákazníků — bez toho dopravce není v checkoutu vidět.
+    $groupIds = array_map(static fn($g) => (int) $g['id_group'], \Group::getGroups($idLang));
+    $c->setGroups($groupIds);
+
     $rw             = new \RangeWeight();
     $rw->id_carrier = (int) $c->id;
     $rw->delimiter1 = 0;
