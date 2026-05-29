@@ -15,10 +15,17 @@ $limit   = (int) ($opts['limit'] ?? 10);
 
 $apiRepo = $di->get(\Packetery\ApiCarrier\ApiCarrierRepository::class);
 
+// API heslo musí být v configu (download ho čte odtud, ne z env) — sync z .env, ať je
+// discovery soběstačné i na instanci, kde ještě neproběhl `make configure`.
+$envApiPass = getenv('PACKETERY_APIPASS') ?: '';
+if ($envApiPass !== '') {
+    \Packetery\Tools\ConfigHelper::update('PACKETERY_APIPASS', $envApiPass);
+}
+
 // Zajistit stažené dopravce (cache); download při prázdné cache nebo --refresh.
 $ids = $apiRepo->getCarrierIds();
 if (empty($ids) || isset($opts['refresh'])) {
-    if (getenv('PACKETERY_APIPASS')) {
+    if ($envApiPass !== '') {
         $errors = $di->get(\Packetery\Cron\Tasks\DownloadCarriers::class)->execute();
         echo empty($errors)
             ? "(dopravci staženi z API)\n"
