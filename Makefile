@@ -5,10 +5,11 @@ export
 
 PS ?= $(DEFAULT_PS)
 
-.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix configure
+.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix configure carriers
 
 up:         ; bin/up $(PS)
 configure:  ; bin/configure $(PS)                # post-install nastavení (fáze 2)
+carriers:   ; bin/carriers $(PS) $(if $(COUNTRY),--country=$(COUNTRY)) $(if $(REFRESH),--refresh)   # výpis dostupných Zásilkovna dopravců
 build:      ; docker compose -p $(PS) -f compose.$(PS).yml build $(PS)   # rebuild image po editaci Dockerfile
 infra:      ; docker compose up -d traefik mysql adminer mailpit
 down:       ; docker compose -p $(PS) -f compose.$(PS).yml down

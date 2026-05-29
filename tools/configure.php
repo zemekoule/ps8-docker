@@ -25,17 +25,9 @@ if (!$tag) {
 
 echo "=== configure: $tag" . ($dryRun ? " (dry-run)" : "") . " ===\n";
 
-/* ---- 1. Boot PrestaShop ---------------------------------------------------- */
-require '/var/www/html/config/config.inc.php';
+/* ---- 1-2. Boot PrestaShop + modulový DI (sdílený bootstrap) ---------------- */
+[$module, $di] = require __DIR__ . '/_bootstrap.php';
 echo "▸ PS bootnut: " . _PS_VERSION_ . "\n";
-
-/* ---- 2. Modulový DI container --------------------------------------------- */
-$module = Module::getInstanceByName('packetery');
-if (!$module || !isset($module->diContainer) || !is_object($module->diContainer)) {
-    fwrite(STDERR, "✗ modul packetery / DI container nedostupný\n");
-    exit(1);
-}
-$di = $module->diContainer;
 echo "▸ modulový DI: " . get_class($di) . "\n";
 
 /* ---- 3. Profil (base ← per-verze override) -------------------------------- */
@@ -236,7 +228,7 @@ function step_carriers(object $ctx): void
         }
     }
 
-    // 2. Výpis dostupných dopravců pro deklarované země (pro návrh mapování)
+    // 2. Stručný souhrn (detailní výpis je v `make carriers [COUNTRY=xx]`)
     $isos = [];
     foreach ($ctx->profile['locations']['countries'] ?? [] as $c) {
         $isos[] = strtoupper($c['iso']);
@@ -244,17 +236,12 @@ function step_carriers(object $ctx): void
     if ($isos) {
         $repo  = $ctx->di->get(\Packetery\ApiCarrier\ApiCarrierRepository::class);
         $avail = $repo->getByCountries($isos);
-        echo "    dostupných Zásilkovna dopravců pro [" . implode(',', $isos) . "]: " . count($avail) . "\n";
-        foreach (array_slice($avail, 0, 12) as $c) {
-            $id   = $c['id'] ?? $c['id_branch'] ?? '?';
-            $name = $c['name'] ?? '?';
-            $ctry = $c['country'] ?? '';
-            echo "      - [$id] $name ($ctry)\n";
-        }
+        echo "    dostupných Zásilkovna dopravců pro [" . implode(',', $isos) . "]: " . count($avail)
+            . " (výpis: make carriers COUNTRY=…)\n";
     }
 
-    // 3. PS dopravci (create/delete) + mapování Zásilkovna↔PS — F2-4 část 2 (TODO podle reálných dat).
-    echo "    (PS dopravci + mapování: F2-4 část 2 — až podle reálných dat)\n";
+    // 3. PS dopravci (create/delete) + mapování Zásilkovna↔PS — F2-4 část 2 (až podle reálných dat).
+    echo "    (PS dopravci + mapování: F2-4 část 2 — až po ručním ověření)\n";
 }
 
 /* ============================ helpers ====================================== */
