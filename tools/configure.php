@@ -320,6 +320,19 @@ function create_ps_carrier(string $name, array $zoneIds, int $idLang): int
     $groupIds = array_map(static fn($g) => (int) $g['id_group'], \Group::getGroups($idLang));
     $c->setGroups($groupIds);
 
+    // Povolit všechny platební moduly pro dopravce (jinak se v checkoutu nenabídne žádná platba
+    // → objednávka nejde dokončit). PS core pro tento směr nemá vhodnou veřejnou metodu
+    // (addCheckboxCarrierRestrictionsForModule je modul→všichni dopravci + duplikuje), proto
+    // cílený INSERT IGNORE do ps_module_carrier — stejná operace jako v PaymentModule (PS core).
+    $ref    = (int) ($c->id_reference ?: $c->id);
+    $shopId = (int) (\Context::getContext()->shop->id ?? 1);
+    foreach (\PaymentModule::getInstalledPaymentModules() as $pm) {
+        \Db::getInstance()->execute(
+            'INSERT IGNORE INTO `' . _DB_PREFIX_ . 'module_carrier` (`id_module`, `id_shop`, `id_reference`) '
+            . 'VALUES (' . (int) $pm['id_module'] . ', ' . $shopId . ', ' . $ref . ')'
+        );
+    }
+
     $rw             = new \RangeWeight();
     $rw->id_carrier = (int) $c->id;
     $rw->delimiter1 = 0;
