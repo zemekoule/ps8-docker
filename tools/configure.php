@@ -240,8 +240,133 @@ function step_carriers(object $ctx): void
             . " (výpis: make carriers COUNTRY=…)\n";
     }
 
-    // 3. PS dopravci (create/delete) + mapování Zásilkovna↔PS — F2-4 část 2 (až podle reálných dat).
-    echo "    (PS dopravci + mapování: F2-4 část 2 — až po ručním ověření)\n";
+    // 3. PS dopravci + mapování Zásilkovna↔PS (aditivní, idempotentní dle packeta_id)
+    $declared = $ctx->profile['carriers'] ?? [];
+    if (!$declared) {
+        echo "    PS dopravci: v profilu nic\n";
+        return;
+    }
+    $carrierRepo = $ctx->di->get(\Packetery\Carrier\CarrierRepository::class);
+    $apiRepo     = $ctx->di->get(\Packetery\ApiCarrier\ApiCarrierRepository::class);
+
+    // existující mapování dle Zásilkovna id (idempotence)
+    $mapped = [];
+    foreach ($carrierRepo->getPacketeryCarriersList() as $m) {
+        $m = (array) $m;
+        if (isset($m['id_branch'])) {
+            $mapped[(string) $m['id_branch']] = true;
+        }
+    }
+    $allZoneIds = [];
+    foreach (\Zone::getZones(false) as $z) {
+        $allZoneIds[] = (int) $z['id_zone'];
+    }
+    $idLang = (int) \Configuration::get('PS_LANG_DEFAULT');
+
+    foreach ($declared as $car) {
+        $pid = (string) $car['packeta_id'];
+        if (isset($mapped[$pid])) {
+            echo "    dopravce '$pid' už namapován — přeskakuji\n";
+            continue;
+        }
+        if ($ctx->dryRun) {
+            echo "    + dopravce '{$car['name']}' → $pid\n";
+            continue;
+        }
+        $api = (array) ($apiRepo->getById($pid) ?: []);
+        if (!$api) {
+            echo "    ⚠ '$pid' není ve staženém feedu — přeskakuji\n";
+            continue;
+        }
+        // zóny: 1 dopravce = 1 země (z country); zpoint/pp_all (country="") → všechny aktivní zóny
+        if (($api['country'] ?? '') === '') {
+            $zids = $allZoneIds;
+        } else {
+            $cid  = (int) \Country::getByIso(strtoupper($api['country']));
+            $zone = $cid ? (int) (new \Country($cid))->id_zone : 0;
+            $zids = $zone ? [$zone] : [];
+        }
+        $carrierId = create_ps_carrier($car['name'], $zids, $idLang);
+        [$ppt, $av, $vendors] = resolve_carrier_fields($ctx->module, $carrierId, $api, $pid);
+        $carrierRepo->setPacketeryCarrier(
+            $carrierId,
+            $pid,
+            $api['name'] ?? $car['name'],
+            $api['currency'] ?? null,
+            $ppt,
+            $av,
+            $vendors
+        );
+        echo "    dopravce: '{$car['name']}' → $pid (PS #$carrierId, typ " . ($ppt ?? 'adresní') . ", zóny " . implode(',', $zids) . ")\n";
+    }
+}
+
+/** Vytvoří PS Carrier se zónami + 0-cenovým váhovým rozsahem (cenu řeší modul jako module carrier). */
+function create_ps_carrier(string $name, array $zoneIds, int $idLang): int
+{
+    $c                    = new \Carrier();
+    $c->name              = $name;
+    $c->active            = 1;
+    $c->deleted           = 0;
+    $c->shipping_method   = 1;
+    $c->range_behavior    = 0;
+    $c->need_range        = 1;
+    $c->shipping_external = 1;
+    $c->is_module         = 0; // setPacketeryCarrier ho přepne na module carrier
+    $c->delay             = [$idLang => 'Zásilkovna'];
+    $c->add();
+
+    $rw             = new \RangeWeight();
+    $rw->id_carrier = (int) $c->id;
+    $rw->delimiter1 = 0;
+    $rw->delimiter2 = 100000;
+    $rw->add();
+
+    foreach ($zoneIds as $zid) {
+        $c->addZone($zid);
+        $d                  = new \Delivery();
+        $d->id_carrier      = (int) $c->id;
+        $d->id_range_weight = (int) $rw->id;
+        $d->id_range_price  = 0;
+        $d->id_zone         = $zid;
+        $d->price           = 0;
+        $d->add();
+    }
+    return (int) $c->id;
+}
+
+/**
+ * Odvození pickup_point_type / address_validation / allowed_vendors.
+ * Capability-detection (C teď, A po refactoru — viz ticket T1):
+ *  - allowed_vendors: REUSE veřejné CarrierAdminForm::getDefaultAllowedVendors (logika modulu).
+ *  - pickup_point_type / address_validation: minimální glue (ty metody jsou dnes private;
+ *    po refactoru modulu se sem napojí jejich veřejné služby).
+ */
+function resolve_carrier_fields($module, int $psCarrierId, array $api, string $packetaId): array
+{
+    $isPickup = !empty($api['is_pickup_points']);
+
+    // pickup_point_type (glue — zrcadlí CarrierAdminForm::getPickupPointType)
+    $ppt = null;
+    if ($isPickup && $packetaId === \Packetery::ZPOINT) {
+        $ppt = 'internal';
+    } elseif ($isPickup) {
+        $ppt = 'external';
+    }
+
+    // address_validation (glue — pickup => null; adresní default 'none')
+    $av = ($ppt === null) ? 'none' : null;
+
+    // allowed_vendors — reuse veřejné metody modulu (vendor logika se neduplikuje)
+    $vendors = null;
+    try {
+        $form = new \Packetery\Carrier\CarrierAdminForm($psCarrierId, $module);
+        $vendors = $form->getDefaultAllowedVendors(['id_branch' => $packetaId], $api);
+    } catch (\Throwable $e) {
+        // fallback: bez vendorů (ověříme v testu, jestli pickup widget funguje)
+    }
+
+    return [$ppt, $av, $vendors];
 }
 
 /**

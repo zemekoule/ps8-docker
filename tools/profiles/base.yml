@@ -24,8 +24,11 @@ locations:
     - { iso: CZ, zone: "Česká republika" }
     - { iso: SK, zone: "Slovensko" }
 
-# PS dopravci + mapování na Zásilkovna dopravce (F2-4).
-carriers: []
+# PS dopravci + mapování na Zásilkovna dopravce (F2-4 část 2). ADITIVNÍ + idempotentní
+# dle packeta_id (nemaže nedeklarované — přidáváš postupně). Minimální: name + packeta_id;
+# zóny (z country dopravce), typ/validace/vendory se ODVODÍ. packeta_id viz `make carriers`.
+carriers:
+  - { name: "Zásilkovna – výdejní místa", packeta_id: zpoint }
 
 # Testovací produkty — seed, enforce exact set (F2-5). Cena bez desetin/realistická,
 # váha s/bez (vynech klíč weight), adult u 1-2. Uprav dle potřeby testů.
