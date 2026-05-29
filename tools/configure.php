@@ -57,7 +57,7 @@ $steps = [
     'module-essentials' => 'step_module_essentials', // F2-2: API heslo, eshop id, COD platby
     'locations'         => 'step_locations', // F2-3: zóny → země (enforce exact set)
     'carriers'          => 'step_carriers', // F2-4: PS dopravci → cron download → přiřazení
-    'products'          => null, // F2-5: seed produktů (+ adult)
+    'products'          => 'step_products', // F2-5: seed produktů (+ adult)
 ];
 
 $failed = 0;
@@ -242,6 +242,67 @@ function step_carriers(object $ctx): void
 
     // 3. PS dopravci (create/delete) + mapování Zásilkovna↔PS — F2-4 část 2 (až podle reálných dat).
     echo "    (PS dopravci + mapování: F2-4 část 2 — až po ručním ověření)\n";
+}
+
+/**
+ * F2-5 — seed testovacích produktů (enforce exact set): smazat existující, vytvořit deklarované.
+ * Cena bez desetin/realistická, váha s/bez, příznak adult (per-produkt přes modulový repo).
+ * Přes Product ObjectModel + StockAvailable (veřejné PS API), ne raw SQL.
+ */
+function step_products(object $ctx): void
+{
+    $declared = $ctx->profile['products'] ?? [];
+    if (!$declared) {
+        echo "    products: profil prázdný, přeskočeno\n";
+        return;
+    }
+    $idLang  = (int) \Configuration::get('PS_LANG_DEFAULT');
+    $homeCat = (int) \Configuration::get('PS_HOME_CATEGORY');
+
+    // Potlač jen známý neškodný CLI warning (Product.php čte $context->controller->controller_type,
+    // controller je v CLI null). Ostatní chyby projdou normálně.
+    set_error_handler(static function ($no, $str) {
+        return strpos($str, 'controller_type') !== false;
+    }, E_WARNING);
+
+    // 1. Enforce exact set — smazat existující produkty
+    $existing = \Product::getProducts($idLang, 0, 100000, 'id_product', 'ASC');
+    if (!$ctx->dryRun) {
+        foreach ($existing as $row) {
+            (new \Product((int) $row['id_product']))->delete();
+        }
+    }
+    echo "    smazáno existujících produktů: " . count($existing) . "\n";
+
+    // 2. Vytvořit deklarované
+    $attrRepo = $ctx->di->get(\Packetery\Product\ProductAttributeRepository::class);
+    foreach ($declared as $prod) {
+        $name   = $prod['name'];
+        $weight = array_key_exists('weight', $prod) ? (float) $prod['weight'] : null;
+        if ($ctx->dryRun) {
+            echo "    + $name (cena {$prod['price']}, váha " . ($weight ?? '—') . ", adult " . (!empty($prod['adult']) ? 'ano' : 'ne') . ")\n";
+            continue;
+        }
+        $p                     = new \Product();
+        $p->name               = [$idLang => $name];
+        $p->link_rewrite       = [$idLang => \Tools::str2url($name)];
+        $p->price              = (float) $prod['price'];
+        $p->id_category_default = $homeCat;
+        $p->active             = 1;
+        if ($weight !== null) {
+            $p->weight = $weight;
+        }
+        $p->add();
+        $p->addToCategories([$homeCat]);
+        \StockAvailable::setQuantity((int) $p->id, 0, 100);
+
+        if (!empty($prod['adult'])) {
+            $attrRepo->insert(['id_product' => (int) $p->id, 'is_adult' => 1]);
+        }
+        echo "    produkt: $name (cena {$prod['price']}, váha " . ($weight ?? '—') . ", adult " . (!empty($prod['adult']) ? 'ano' : 'ne') . ")\n";
+    }
+
+    restore_error_handler();
 }
 
 /* ============================ helpers ====================================== */

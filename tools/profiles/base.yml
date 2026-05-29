@@ -27,5 +27,10 @@ locations:
 # PS dopravci + mapování na Zásilkovna dopravce (F2-4).
 carriers: []
 
-# Testovací produkty — seed, enforce exact set (F2-5).
-products: []       # např. [{ name: "Test 1", price: 1290, weight: 2.5, adult: false }]
+# Testovací produkty — seed, enforce exact set (F2-5). Cena bez desetin/realistická,
+# váha s/bez (vynech klíč weight), adult u 1-2. Uprav dle potřeby testů.
+products:
+  - { name: "Test lehký", price: 290, weight: 0.5 }
+  - { name: "Test těžký", price: 1990, weight: 8 }
+  - { name: "Test bez váhy", price: 590 }
+  - { name: "Test dospělý", price: 1290, weight: 2, adult: true }
