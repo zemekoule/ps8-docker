@@ -1,0 +1,33 @@
+# Sdílený template PS služby — fragmenty verzí (compose.<tag>.yml) ho rozšiřují
+# přes `extends`. NESPOUŠTÍ se samostatně (nemá container_name ani porty/src).
+# Per-verze se doplní: DB_NAME, PS_DOMAIN, ./src/<tag> mount, Traefik labely.
+services:
+  ps-template:
+    build:
+      context: ./images/php81
+      args:
+        PHP_BASE_TAG: 8.1-apache
+        XDEBUG_VERSION: 3.4.5
+    restart: unless-stopped
+    environment:
+      DB_SERVER: dev_db
+      DB_USER: root
+      DB_PASSWD: asdf
+      PS_INSTALL_AUTO: 1
+      PS_INSTALL_DB: 1
+      PS_DEV_MODE: ${PS_DEV_MODE:-1}
+      PS_LANGUAGE: ${PS_LANGUAGE:-cs}
+      PS_COUNTRY: ${PS_COUNTRY:-CZ}
+      PS_ALL_LANGUAGES: ${PS_ALL_LANGUAGES:-0}
+      PS_FOLDER_ADMIN: ${PS_FOLDER_ADMIN:-admin1234}
+      ADMIN_MAIL: ${ADMIN_MAIL:-demo@prestashop.com}
+      ADMIN_PASSWD: ${ADMIN_PASSWD:-prestashop_demo}
+    volumes:
+      - ./xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - type: bind
+        source: ./modules/prestashop/packetery
+        target: /var/www/html/modules/packetery
+      - type: bind
+        source: ./modules/prestashop
+        target: /var/www/packetery-dev
+    networks: [prestashop_network]

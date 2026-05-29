@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Nahodí jednu PS verzi: infra → core do src/<tag> → kontejner verze.
+# Při prvním běhu base image nainstaluje PS (idempotentní — viz plán). Počká na hotovo.
+set -euo pipefail
+TAG="${1:?usage: bin/up <tag>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+
+echo "▸ infra (traefik, mysql, adminer, mailpit) — vytvoří sdílenou síť"
+docker compose up -d traefik mysql adminer mailpit
+
+bin/download "$TAG"
+
+echo "▸ nahazuji $TAG (vlastní projekt -p $TAG)"
+docker compose -p "$TAG" -f "compose.$TAG.yml" up -d --build "$TAG"
+
+DOMAIN="$(grep -E 'PS_DOMAIN:' "compose.$TAG.yml" | sed -E 's/.*PS_DOMAIN: *"?([^"]+)"?.*/\1/')"
+ADMIN="$(grep -E '^PS_FOLDER_ADMIN=' .env | cut -d= -f2)"
+
+echo "⏳ čekám na dokončení instalace (první běh chvíli trvá)…"
+for i in $(seq 1 90); do
+  if docker logs "$TAG" 2>&1 | grep -q "Installation successful"; then break; fi
+  if docker logs "$TAG" 2>&1 | grep -qi "Starting web server now"; then break; fi
+  sleep 2
+done
+
+# readiness HTTP přes Traefik (Host header, bez závislosti na *.localhost DNS).
+# Polluje, dokud Traefik nezaregistruje route (2xx/3xx) — ne přechodné 404.
+code=000
+for i in $(seq 1 20); do
+  code="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $DOMAIN" http://127.0.0.1/ || echo 000)"
+  case "$code" in 2*|3*) break;; esac
+  sleep 1
+done
+echo ""
+echo "✅ $TAG ready (HTTP $code) → http://$DOMAIN   (admin: http://$DOMAIN/$ADMIN)"
+echo "   logy: docker logs -f $TAG"

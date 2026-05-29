@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Naplní ./src/<tag> PrestaShop core (host-side, přes one-shot base kontejner,
+# který umí curl+unzip+ps-extractor). Idempotentní: když je src/<tag> neprázdný, přeskočí.
+set -euo pipefail
+TAG="${1:?usage: bin/download <tag>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+FRAG="$ROOT/compose.$TAG.yml"
+[ -f "$FRAG" ] || { echo "✗ neznámá verze: chybí $FRAG"; exit 1; }
+
+SRC="$ROOT/src/$TAG"
+if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
+  echo "✓ src/$TAG už je naplněn — download přeskočen"
+  exit 0
+fi
+
+ZIP_URL="$(grep -E 'PS_ZIP_URL:' "$FRAG" | sed -E 's/.*PS_ZIP_URL: *"?([^"]+)"?.*/\1/')"
+[ -n "$ZIP_URL" ] || { echo "✗ PS_ZIP_URL nenalezen v $FRAG"; exit 1; }
+
+echo "⇣ stahuji PS core pro $TAG: $ZIP_URL"
+mkdir -p "$SRC"
+docker run --rm -e PS_ZIP_URL="$ZIP_URL" -v "$SRC":/out prestashop/base:8.1-apache bash -c '
+  set -e
+  curl -fSL "$PS_ZIP_URL" -o /tmp/prestashop.zip
+  mkdir -p /tmp/data-ps && unzip -q /tmp/prestashop.zip -d /tmp/data-ps/
+  bash /tmp/ps-extractor.sh /tmp/data-ps
+  cp -R -p /tmp/data-ps/prestashop/. /out/'
+echo "✓ src/$TAG naplněn"

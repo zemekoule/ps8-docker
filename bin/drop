@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Nevratně odstraní verzi: kontejner+image, schéma prestashop_<tag>, ./src/<tag>.
+# Fragment compose.<tag>.yml ZÁMĚRNĚ ponechán (smaž ručně, rušíš-li verzi natrvalo).
+# Pojistka: primární verzi (DEFAULT_PS) odmítne.
+set -euo pipefail
+TAG="${1:?usage: bin/drop <tag>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+DEFAULT_PS="$(grep -E '^DEFAULT_PS=' .env | cut -d= -f2)"
+
+[ "$TAG" = "$DEFAULT_PS" ] && { echo "✗ $TAG je primární verze (DEFAULT_PS) — drop odmítnut."; exit 1; }
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+
+echo "🔴 drop $TAG — kontejner+image, schéma prestashop_$TAG, ./src/$TAG"
+docker compose -p "$TAG" -f "compose.$TAG.yml" down --rmi local 2>/dev/null || true
+docker exec dev_db mariadb -u root -pasdf -e "DROP DATABASE IF EXISTS prestashop_$TAG;" 2>/dev/null || true
+rm -rf "src/$TAG"
+echo "✓ $TAG odstraněna (fragment compose.$TAG.yml ponechán)."

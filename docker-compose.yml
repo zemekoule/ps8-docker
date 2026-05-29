@@ -1,76 +1,41 @@
+# Sdílená vždy-běžící infra: traefik (routing podle hostname), mysql (schéma per
+# verze), adminer, mailpit. PS verze se přidávají přes compose.<tag>.yml
+# (skládá se přes -f, viz Makefile / bin/). PS služby NEpublikují porty — routuje Traefik.
 services:
-
-  adminer:
-    image: adminer
-    restart: always
-    ports:
-      - "8081:8080"
-    networks:
-      - prestashop_network
-
-  prestashop:
-    container_name: prestashop
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        ARG_UID: ${ENV_UID:-1000}
-        ARG_GID: ${ENV_GID:-1000}
+  traefik:
+    image: traefik:v3
+    container_name: traefik
     restart: unless-stopped
-    depends_on:
-      - mysql
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --entryPoints.web.address=:80
     ports:
-      - "8080:80"
-
-    environment:
-      DB_SERVER: dev_db
-      DB_NAME: prestashop
-      DB_USER: root
-      DB_PASSWD: asdf
-      PS_LANGUAGE: ${PS_LANGUAGE:-en}
-      PS_COUNTRY: ${PS_COUNTRY:-CZ}
-      PS_ALL_LANGUAGES: ${PS_ALL_LANGUAGES:-1} # Install all the existing languages for the current version
-      ADMIN_MAIL: ${ADMIN_MAIL:-demo@prestashop.com} # Override default admin email: demo@prestashop.com
-      ADMIN_PASSWD:	${ADMIN_PASSWD:-prestashop_demo} #Override default admin password: prestashop_demo
-      PS_DEV_MODE: ${PS_DEV_MODE:-1}
-      PS_FOLDER_ADMIN: ${PS_FOLDER_ADMIN:-admin} # Change the name of the admin folder admin
-      # auto-install with test data
-      # http://localhost:8080 with the front office containing the demo products and http://localhost:8080/admin for the back office.
-      PS_INSTALL_AUTO: ${PS_INSTALL_AUTO:-1}
-      PS_DOMAIN: localhost:8080
-      #      PS_ERASE_DB: 1
-      PS_INSTALL_DB: ${PS_INSTALL_DB:-0}
-      # value in PhpStorm Settings/PHP/Servers; useful when debugging CLI scripts from within the container, not from PhpStorm
-      PHP_IDE_CONFIG: "serverName=prestashop.local"
-
+      - "80:80"
     volumes:
-      - ./src:/var/www/html
-      - ./xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
-      - type: bind
-        source: ./modules/prestashop/packetery # local path to the module
-        target: /var/www/html/modules/packetery # path to be mounted in the container
-      - type: bind
-        source: ./modules/prestashop
-        target: /var/www/packetery-dev
-
-    networks:
-      - prestashop_network
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [prestashop_network]
 
   mysql:
-    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
     container_name: dev_db
     image: mariadb:12
     restart: unless-stopped
     environment:
-      MARIADB_DATABASE: prestashop
       MARIADB_ROOT_PASSWORD: asdf
       TZ: Europe/Prague
     volumes:
       - ./db:/var/lib/mysql
     ports:
-      - 3308:3306
-    networks:
-      - prestashop_network
+      - "3308:3306"
+    networks: [prestashop_network]
+
+  adminer:
+    image: adminer
+    container_name: adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks: [prestashop_network]
 
   mailpit:
     image: axllent/mailpit
@@ -79,15 +44,15 @@ services:
     volumes:
       - ./mailpit:/data
     ports:
-      - 8025:8025
-      - 1025:1025
+      - "8025:8025"
+      - "1025:1025"
     environment:
       MP_MAX_MESSAGES: 5000
       MP_DATABASE: /data/mailpit.db
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
-    networks:
-      - prestashop_network
+    networks: [prestashop_network]
 
 networks:
   prestashop_network:
+    name: prestashop_network

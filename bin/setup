@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Onboarding nového vývojáře: prerekvizity → modul → .env → primární verze.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+
+MODULE_REPO="git@github.com:Zasilkovna/prestashop.git"
+MODULE_BRANCH="v3.5"
+MODULE_PATH="modules/prestashop/packetery"
+
+echo "▸ kontrola prerekvizit"
+command -v docker >/dev/null   || { echo "✗ chybí docker"; exit 1; }
+docker compose version >/dev/null 2>&1 || { echo "✗ chybí 'docker compose'"; exit 1; }
+docker info >/dev/null 2>&1     || { echo "✗ docker daemon neběží — spusť Docker a opakuj"; exit 1; }
+
+echo "▸ modul ($MODULE_PATH)"
+if [ -d "$MODULE_PATH/.git" ]; then
+  echo "  ✓ už naklonován"
+else
+  mkdir -p modules/prestashop
+  git clone -b "$MODULE_BRANCH" "$MODULE_REPO" "$MODULE_PATH"
+fi
+
+echo "▸ .env"
+if [ -f .env ]; then echo "  ✓ existuje"; else cp .env.example .env; echo "  ✓ vytvořen z .env.example"; fi
+
+DEFAULT_PS="$(grep -E '^DEFAULT_PS=' .env | cut -d= -f2)"
+echo "▸ nahazuji primární verzi: $DEFAULT_PS"
+bin/up "$DEFAULT_PS"
+
+echo ""
+echo "Hotovo. Přehled verzí: make status"
