@@ -29,6 +29,7 @@ locations:
 # zóny (z country dopravce), typ/validace/vendory se ODVODÍ. packeta_id viz `make carriers`.
 carriers:
   - { name: "Zásilkovna – výdejní místa", packeta_id: zpoint }
+  - { name: "Zásilkovna – doručení domů", packeta_id: 106 }
 
 # Testovací produkty — seed, enforce exact set (F2-5). Cena bez desetin/realistická,
 # váha s/bez (vynech klíč weight), adult u 1-2. Uprav dle potřeby testů.
