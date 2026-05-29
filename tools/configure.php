@@ -62,7 +62,7 @@ $ctx = (object) [
 /* ---- 6. Dispatch kroků (pořadí = DAG závislostí) -------------------------- */
 // Každý krok = [název => callable(ctx)]. Doplní se v F2-2..F2-5.
 $steps = [
-    'module-essentials' => null, // F2-2: API heslo, eshop id, COD platby
+    'module-essentials' => 'step_module_essentials', // F2-2: API heslo, eshop id, COD platby
     'locations'         => null, // F2-3: zóny → země (enforce exact set)
     'carriers'          => null, // F2-4: PS dopravci → cron download → přiřazení
     'products'          => null, // F2-5: seed produktů (+ adult)
@@ -85,6 +85,49 @@ foreach ($steps as $name => $fn) {
 
 echo $failed ? "✗ configure: $failed krok(ů) selhalo\n" : "✓ configure hotovo\n";
 exit($failed ? 1 : 0);
+
+/* ============================ kroky ======================================== */
+
+/**
+ * F2-2 — esenciální nastavení modulu: API heslo + eshop id (z ENV secrets) + COD platby.
+ * Vše přes veřejné API: ConfigHelper::update (static) a PaymentRepository (DI). Idempotentní.
+ */
+function step_module_essentials(object $ctx): void
+{
+    // API heslo (z .env, ne z profilu)
+    if ($ctx->secrets['apipass'] !== '') {
+        if (!$ctx->dryRun) {
+            \Packetery\Tools\ConfigHelper::update('PACKETERY_APIPASS', $ctx->secrets['apipass']);
+        }
+        echo "    PACKETERY_APIPASS ← .env (" . strlen($ctx->secrets['apipass']) . " zn.)\n";
+    } else {
+        echo "    PACKETERY_APIPASS — přeskočeno (prázdné v .env)\n";
+    }
+
+    // Označení odesílatele (z .env)
+    if ($ctx->secrets['eshop_id'] !== '') {
+        if (!$ctx->dryRun) {
+            \Packetery\Tools\ConfigHelper::update('PACKETERY_ESHOP_ID', $ctx->secrets['eshop_id']);
+        }
+        echo "    PACKETERY_ESHOP_ID ← .env\n";
+    } else {
+        echo "    PACKETERY_ESHOP_ID — přeskočeno (prázdné v .env)\n";
+    }
+
+    // COD platby — module_name plateb = dobírka (z profilu)
+    $cod = $ctx->profile['cod_payments'] ?? [];
+    if ($cod) {
+        $repo = $ctx->di->get(\Packetery\Payment\PaymentRepository::class);
+        foreach ($cod as $moduleName) {
+            if (!$ctx->dryRun) {
+                $repo->setOrInsert(1, $moduleName);
+            }
+            echo "    COD: $moduleName → is_cod=1\n";
+        }
+    } else {
+        echo "    COD: žádné platby v profilu\n";
+    }
+}
 
 /* ============================ helpers ====================================== */
 

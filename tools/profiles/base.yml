@@ -8,8 +8,10 @@ module:
   # label_format: "A6 on A4"
   # default_package_weight: "1"
 
-# module_name platebních modulů = dobírka (COD). Per-verze (dle nainstalovaných). Doplní F2-2.
-cod_payments: []
+# module_name platebních modulů = dobírka (COD). ps_cashondelivery = nativní PS COD modul.
+# Per-verze override v ps<tag>.yml, pokud se dostupné platby liší.
+cod_payments:
+  - ps_cashondelivery
 
 # Lokace (F2-3). Pořadí aplikace: zóny → země.
 locations:
