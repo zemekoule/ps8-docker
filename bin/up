@@ -13,7 +13,9 @@ docker compose up -d traefik mysql adminer mailpit
 bin/download "$TAG"
 
 echo "▸ nahazuji $TAG (vlastní projekt -p $TAG)"
-docker compose -p "$TAG" -f "compose.$TAG.yml" up -d --build "$TAG"
+# bez --build: compose postaví image jen když chybí (poprvé), jinak build přeskočí.
+# Rebuild po editaci images/php81/Dockerfile: `make build PS=$TAG`.
+docker compose -p "$TAG" -f "compose.$TAG.yml" up -d "$TAG"
 
 DOMAIN="$(grep -E 'PS_DOMAIN:' "compose.$TAG.yml" | sed -E 's/.*PS_DOMAIN: *"?([^"]+)"?.*/\1/')"
 ADMIN="$(grep -E '^PS_FOLDER_ADMIN=' .env | cut -d= -f2)"

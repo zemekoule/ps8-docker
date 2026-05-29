@@ -15,6 +15,33 @@ make status      # přehled verzí + URL
 ```
 Po dokončení: http://ps82.localhost (storefront), `/admin1234` (back office).
 
+## Každodenní práce (start / stop / restart)
+Scénáře, jak to ovládat. Data (`db/`, `src/`) se stop/startem **neztrácí** — maže je jen `make drop`.
+
+**Co teď běží?**
+```
+make status
+```
+
+**Končím práci — dvě varianty:**
+- *Nejjednodušší:* prostě zavři Docker Desktop. Kontejnery mají `restart: unless-stopped`,
+  takže po dalším spuštění Dockeru **naběhnou samy** — nemusíš nic spouštět.
+- *Explicitní stop (uvolní RAM hned):* `make down-all` (zastaví všechny verze + infra).
+
+**Spouštím:**
+- *Po restartu Dockeru, když jsi nedělal `down`:* nic — naběhlo samo, ověř `make status`.
+- *Po `make down-all` (nebo poprvé):*
+  ```
+  make up              # infra + primární verze (ps82)
+  make up PS=ps91      # přidá 9.1.3 souběžně
+  ```
+  Neinstaluje se znovu (data jsou) → jen rychlý start.
+
+**Jen jedna verze:** `make down PS=ps91` (stop) · `make up PS=ps91` (start).
+
+> `make up` vždy nejdřív zvedne i infra (traefik/mysql/adminer/mailpit), takže stačí jeden příkaz.
+> `make up` bez argumentu zvedne **jen primární** verzi — ostatní si nahoď ručně.
+
 ## Verze
 Verze = krátký tag `ps<major><minor>` (`ps82` = PS 8.2.x, `ps91` = PS 9.1.x classic).
 Každá verze je jeden soubor `compose.<tag>.yml` (plná verze + ZIP URL + doména jsou data v něm).
@@ -52,12 +79,51 @@ instancích. **Změny modulu commituješ do modulového repa**, ne sem.
 | Mailpit | http://localhost:8025 |
 | MariaDB | localhost:3308 (root / asdf) |
 
+## E-maily (Mailpit)
+Mailpit je **sdílený SMTP sink** pro všechny verze — vše odeslané skončí v http://localhost:8025
+(žádné maily neodejdou ven). Nastav v adminu každé verze, kterou chceš testovat:
+
+Admin → **Pokročilé parametry → E-mail** (v PS 9 pod **Nástroje → E-maily**):
+- zvol **„Nastavit vlastní parametry SMTP"**
+- **SMTP server:** `mailpit`  ← container name na sdílené síti, **ne** `localhost`
+- **Port:** `1025`
+- **Šifrování:** žádné
+- **uživatel / heslo:** prázdné (Mailpit přijme cokoliv)
+
+Pak „Poslat testovací e-mail" → dorazí do Mailpit UI.
+Pozn.: maily ze všech verzí padají do **jedné** schránky.
+
 ## PhpStorm + Xdebug
-PHP → Servers, jeden server per verze:
-- name `ps82.local` / `ps91.local` (sedí s `PHP_IDE_CONFIG` v `compose.<tag>.yml`)
-- host `ps82.localhost` / `ps91.localhost`, port 80
-- path mapping: `modules/prestashop/packetery` → `/var/www/html/modules/packetery`,
-  `src/<tag>` → `/var/www/html`
+Cíl: breakpoint v modulu se zastaví při načtení stránky. Stack-side je Xdebug hotový
+(`xdebug.ini`: mode=debug, client_host=host.docker.internal, port 9003, trigger). V PhpStormu:
+
+**1. Debug port** — Settings → PHP → Debug → Xdebug → **Debug port `9003`**, ✓ „Can accept external connections".
+
+**2. Server (jeden per verze)** — Settings → PHP → Servers → „+":
+- **Name:** `ps82.local` / `ps91.local` ← musí **přesně** sedět s `PHP_IDE_CONFIG` v `compose.<tag>.yml` (jinak se nespáruje mapping)
+- **Host:** `ps82.localhost` / `ps91.localhost` · **Port:** `80` · Debugger: Xdebug
+- ✓ **Use path mappings** (dvě):
+  - `src/<tag>` → `/var/www/html`
+  - `modules/prestashop/packetery` → `/var/www/html/modules/packetery`
+
+**3.** V toolbaru zapni **„Start Listening for PHP Debug Connections"** (chytá všechny verze naráz).
+
+**4. Breakpoint + trigger** — dej breakpoint do modulu. Máme `start_with_request=trigger`, takže
+Xdebug se **musí vyvolat** (jinak se nic nestane — nejčastější chyba):
+- browser extension **„Xdebug helper"** → Debug (IDE key PHPSTORM), nebo
+- přidej do URL **`?XDEBUG_TRIGGER=1`** (např. `http://ps82.localhost/?XDEBUG_TRIGGER=1`)
+
+Načti stránku → PhpStorm skočí na breakpoint. (CLI: `make xdebug PS=… ARGS="…"` posílá trigger sám.)
+
+### Indexace / výkon (důležité)
+PrestaShop v dev módu pořád přegenerovává `var/cache` (tisíce souborů) — když je `src/<tag>`
+na bind mountu, PhpStorm to vidí a **neustále reindexuje** (pomalé IDE i načítání stránek).
+
+➜ V PhpStormu označ **`src/<tag>/var`** každé verze jako **Excluded**
+(pravý klik na složku → *Mark Directory as → Excluded*).
+
+`src/<tag>` (PS core) **nech indexovaný** — autocomplete a navigace do PS API
+(`Cart`, `Order`, `Module`, `Db`…) je pro vývoj modulu důležitá. Excluduj jen `var`.
 
 ## Architektura (proč takhle)
 Image = jen PHP runtime (`images/php81/Dockerfile`), PrestaShop core se **nepeče** —

@@ -5,9 +5,10 @@ export
 
 PS ?= $(DEFAULT_PS)
 
-.PHONY: up infra down down-all drop status logs shell shell-root mysql php xdebug check fix
+.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix
 
 up:         ; bin/up $(PS)
+build:      ; docker compose -p $(PS) -f compose.$(PS).yml build $(PS)   # rebuild image po editaci Dockerfile
 infra:      ; docker compose up -d traefik mysql adminer mailpit
 down:       ; docker compose -p $(PS) -f compose.$(PS).yml down
 drop:       ; bin/drop $(PS)
