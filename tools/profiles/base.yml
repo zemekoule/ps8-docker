@@ -1,0 +1,23 @@
+# Sdílený profil nastavení (fáze 2). Per-verze odchylky v ps<tag>.yml (override).
+# Secrets (API heslo PACKETERY_APIPASS, eshop id PACKETERY_ESHOP_ID) NEJSOU tady — jdou z .env.
+# Listy (zones/countries/carriers/products/cod_payments) = "enforce exact set":
+# co je v profilu = cílový stav, skript srovná (smaže ostatní).
+
+# Modulová ps_configuration nastavení (plain nebo JSON-string). Doplní F2-2.
+module:
+  # label_format: "A6 on A4"
+  # default_package_weight: "1"
+
+# module_name platebních modulů = dobírka (COD). Per-verze (dle nainstalovaných). Doplní F2-2.
+cod_payments: []
+
+# Lokace (F2-3). Pořadí aplikace: zóny → země.
+locations:
+  zones: []        # např. [{ name: "Česká republika" }, { name: "Slovensko" }]
+  countries: []    # např. [{ iso: CZ, zone: "Česká republika" }, { iso: SK, zone: "Slovensko" }]
+
+# PS dopravci + mapování na Zásilkovna dopravce (F2-4).
+carriers: []
+
+# Testovací produkty — seed, enforce exact set (F2-5).
+products: []       # např. [{ name: "Test 1", price: 1290, weight: 2.5, adult: false }]

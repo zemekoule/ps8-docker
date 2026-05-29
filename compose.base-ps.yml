@@ -24,6 +24,7 @@ services:
       ADMIN_PASSWD: ${ADMIN_PASSWD:-prestashop_demo}
     volumes:
       - ./xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - ./tools:/var/www/dev-tools:ro          # configure engine + profily (fáze 2)
       - type: bind
         source: ./modules/prestashop/packetery
         target: /var/www/html/modules/packetery

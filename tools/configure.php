@@ -1,0 +1,135 @@
+<?php
+/**
+ * Configure engine (fáze 2) — post-install nastavení PS + modulu Packeta.
+ *
+ * Bootne PrestaShop, načte deklarativní YAML profil (base + per-verze override),
+ * a aplikuje nastavení přes VEŘEJNÉ API (ObjectModely + modulový DI), idempotentně.
+ * ŽÁDNÝ raw SQL. Secrets (API heslo, eshop id) z ENV, ne z profilu.
+ *
+ * Spouští se v kontejneru: php /var/www/dev-tools/configure.php --profile=<tag> [--dry-run]
+ * (obvykle přes `bin/configure` / `make configure PS=<tag>`).
+ *
+ * F2-1 = skeleton: boot + load/merge profilu + DI + dispatch framework.
+ * Reálné kroky (module/locations/carriers/products) se doplní v F2-2..F2-5.
+ */
+
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
+
+$opts    = getopt('', ['profile:', 'dry-run']);
+$tag     = $opts['profile'] ?? getenv('PS_TAG') ?: null;
+$dryRun  = isset($opts['dry-run']);
+if (!$tag) {
+    fwrite(STDERR, "✗ chybí --profile=<tag>\n");
+    exit(1);
+}
+
+echo "=== configure: $tag" . ($dryRun ? " (dry-run)" : "") . " ===\n";
+
+/* ---- 1. Boot PrestaShop ---------------------------------------------------- */
+require '/var/www/html/config/config.inc.php';
+echo "▸ PS bootnut: " . _PS_VERSION_ . "\n";
+
+/* ---- 2. Modulový DI container --------------------------------------------- */
+$module = Module::getInstanceByName('packetery');
+if (!$module || !isset($module->diContainer) || !is_object($module->diContainer)) {
+    fwrite(STDERR, "✗ modul packetery / DI container nedostupný\n");
+    exit(1);
+}
+$di = $module->diContainer;
+echo "▸ modulový DI: " . get_class($di) . "\n";
+
+/* ---- 3. Profil (base ← per-verze override) -------------------------------- */
+$profile = load_profile(__DIR__ . '/profiles', $tag);
+echo "▸ profil načten: sekce [" . implode(', ', array_keys($profile)) . "]\n";
+
+/* ---- 4. Secrets z ENV (ne z profilu) -------------------------------------- */
+$secrets = [
+    'apipass'  => getenv('PACKETERY_APIPASS') ?: '',
+    'eshop_id' => getenv('PACKETERY_ESHOP_ID') ?: '',
+];
+echo "▸ secrets: apipass=" . mask($secrets['apipass']) . ", eshop_id=" . mask($secrets['eshop_id']) . "\n";
+
+/* ---- 5. Kontext pro kroky -------------------------------------------------- */
+$ctx = (object) [
+    'tag'     => $tag,
+    'profile' => $profile,
+    'secrets' => $secrets,
+    'di'      => $di,
+    'module'  => $module,
+    'dryRun'  => $dryRun,
+];
+
+/* ---- 6. Dispatch kroků (pořadí = DAG závislostí) -------------------------- */
+// Každý krok = [název => callable(ctx)]. Doplní se v F2-2..F2-5.
+$steps = [
+    'module-essentials' => null, // F2-2: API heslo, eshop id, COD platby
+    'locations'         => null, // F2-3: zóny → země (enforce exact set)
+    'carriers'          => null, // F2-4: PS dopravci → cron download → přiřazení
+    'products'          => null, // F2-5: seed produktů (+ adult)
+];
+
+$failed = 0;
+foreach ($steps as $name => $fn) {
+    if ($fn === null) {
+        echo "  · $name — TODO (zatím neimplementováno)\n";
+        continue;
+    }
+    try {
+        echo "▸ $name\n";
+        $fn($ctx);
+    } catch (\Throwable $e) {
+        $failed++;
+        fwrite(STDERR, "  ✗ $name selhal: " . $e->getMessage() . "\n");
+    }
+}
+
+echo $failed ? "✗ configure: $failed krok(ů) selhalo\n" : "✓ configure hotovo\n";
+exit($failed ? 1 : 0);
+
+/* ============================ helpers ====================================== */
+
+/** Načte base.yml a zmerguje s <tag>.yml (override vyhrává; asoc. pole rekurzivně, listy nahradí). */
+function load_profile(string $dir, string $tag): array
+{
+    $base = parse_yaml("$dir/base.yml");
+    $over = file_exists("$dir/$tag.yml") ? parse_yaml("$dir/$tag.yml") : [];
+    return deep_merge($base, $over);
+}
+
+function parse_yaml(string $path): array
+{
+    if (!file_exists($path)) {
+        return [];
+    }
+    if (!class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+        fwrite(STDERR, "✗ Symfony Yaml nedostupný — nelze parsovat $path\n");
+        exit(1);
+    }
+    return (array) (\Symfony\Component\Yaml\Yaml::parseFile($path) ?? []);
+}
+
+/** Asociativní klíče se mergují rekurzivně; sekvenční (list) hodnoty override NAHRADÍ (enforce exact set). */
+function deep_merge(array $base, array $over): array
+{
+    foreach ($over as $k => $v) {
+        if (is_array($v) && isset($base[$k]) && is_array($base[$k]) && is_assoc($v) && is_assoc($base[$k])) {
+            $base[$k] = deep_merge($base[$k], $v);
+        } else {
+            $base[$k] = $v;
+        }
+    }
+    return $base;
+}
+
+function is_assoc(array $a): bool
+{
+    return $a !== [] && array_keys($a) !== range(0, count($a) - 1);
+}
+
+function mask(string $s): string
+{
+    if ($s === '') {
+        return '(prázdné)';
+    }
+    return strlen($s) <= 4 ? '****' : substr($s, 0, 2) . '…' . substr($s, -2) . ' (' . strlen($s) . ' zn.)';
+}

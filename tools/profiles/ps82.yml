@@ -1,0 +1,3 @@
+# Odchylky pro ps82 (PS 8.2.x) — override nad base.yml.
+# Doplní se v F2-2..F2-5 (zejm. cod_payments dle nainstalovaných platebních modulů, dopravci).
+cod_payments: []

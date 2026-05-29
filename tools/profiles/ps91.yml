@@ -1,0 +1,3 @@
+# Odchylky pro ps91 (PS 9.1.x classic) — override nad base.yml.
+# Doplní se v F2-2..F2-5.
+cod_payments: []
