@@ -35,6 +35,22 @@ for i in $(seq 1 20); do
   case "$code" in 2*|3*) break;; esac
   sleep 1
 done
+# Název obchodu = tag (PS_SHOP_NAME z fragmentu). Rozliší verze v Mailpitu —
+# subjekt mailů má tvar "… [<shop_name>]". Base entrypoint --name nenastavuje,
+# proto ho dopisujeme tady. Idempotentní: zapíše jen když se liší (čerstvý install),
+# jinak no-op. Nekritické — chyba neshodí up.
+SHOP_NAME="$(docker exec "$TAG" printenv PS_SHOP_NAME 2>/dev/null || true)"
+if [ -n "$SHOP_NAME" ]; then
+  DB_NAME="$(docker exec "$TAG" printenv DB_NAME 2>/dev/null || true)"
+  DB_PREFIX="$(docker exec "$TAG" printenv DB_PREFIX 2>/dev/null || echo ps_)"
+  if docker exec dev_db mariadb -u root -pasdf "$DB_NAME" -e \
+       "UPDATE ${DB_PREFIX}configuration SET value='${SHOP_NAME}' WHERE name='PS_SHOP_NAME' AND value<>'${SHOP_NAME}';" 2>/dev/null; then
+    echo "▸ název obchodu: $SHOP_NAME"
+  else
+    echo "⚠ název obchodu se nepodařilo nastavit (nekritické)"
+  fi
+fi
+
 echo ""
 echo "✅ $TAG ready (HTTP $code) → http://$DOMAIN   (admin: http://$DOMAIN/$ADMIN)"
 echo "   logy: docker logs -f $TAG"

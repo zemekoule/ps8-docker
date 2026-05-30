@@ -12,6 +12,7 @@ services:
       PS_VERSION: "8.2.6"
       PS_ZIP_URL: "https://api.prestashop-project.org/assets/prestashop/8.2.6/prestashop.zip"
       PHP_IDE_CONFIG: "serverName=ps82.local"
+      PS_SHOP_NAME: ps82             # název obchodu → rozlišení verzí v Mailpitu (subjekt "… [ps82]"); aplikuje bin/up
     volumes:
       - ./src/ps82:/var/www/html
     labels:

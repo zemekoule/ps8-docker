@@ -133,7 +133,9 @@ Admin → **Pokročilé parametry → E-mail** (v PS 9 pod **Nástroje → E-mai
 - **uživatel / heslo:** prázdné (Mailpit přijme cokoliv)
 
 Pak „Poslat testovací e-mail" → dorazí do Mailpit UI.
-Pozn.: maily ze všech verzí padají do **jedné** schránky.
+Pozn.: maily ze všech verzí padají do **jedné** schránky — verze poznáš podle
+názvu obchodu v subjektu i odesílateli (`[ps82]` vs `[ps91]`). Název nastaví
+`bin/up` z `PS_SHOP_NAME` ve fragmentu verze.
 
 ## PhpStorm + Xdebug
 Cíl: breakpoint v modulu se zastaví při načtení stránky. Stack-side je Xdebug hotový

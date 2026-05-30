@@ -18,6 +18,7 @@ services:
       PS_VERSION: "1.7.8.11"
       PS_ZIP_URL: "https://api.prestashop-project.org/assets/prestashop/1.7.8.11/prestashop.zip"
       PHP_IDE_CONFIG: "serverName=ps178.local"
+      PS_SHOP_NAME: ps178            # název obchodu → rozlišení verzí v Mailpitu (subjekt "… [ps178]"); aplikuje bin/up
     volumes:
       - ./src/ps178:/var/www/html
     labels:
