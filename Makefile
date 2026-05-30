@@ -47,11 +47,12 @@ e2e-report:
 	@cd e2e/prestashop && export NVM_DIR="$$HOME/.nvm" && . "$$NVM_DIR/nvm.sh" && nvm use >/dev/null && \
 	  npx playwright show-report
 
-# Shodí všechny verze (každá vlastní projekt) + infra.
+# Shodí všechny běžící verze (každá vlastní projekt) + infra.
 down-all:
 	@for f in compose.*.yml; do \
 	  [ "$$f" = "compose.base-ps.yml" ] && continue; \
 	  tag="$${f#compose.}"; tag="$${tag%.yml}"; \
+	  [ -z "$$(docker ps -aq --filter label=com.docker.compose.project=$$tag)" ] && continue; \
 	  docker compose -p "$$tag" -f "$$f" down; \
 	done
 	@docker compose down
