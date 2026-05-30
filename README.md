@@ -125,6 +125,23 @@ na bind mountu, PhpStorm to vidí a **neustále reindexuje** (pomalé IDE i nač
 `src/<tag>` (PS core) **nech indexovaný** — autocomplete a navigace do PS API
 (`Cart`, `Order`, `Module`, `Db`…) je pro vývoj modulu důležitá. Excluduj jen `var`.
 
+## E2E testy (Playwright)
+Proklikávají reálný admin flow modulu Packeta a ověří výsledek v UI i v DB.
+Běží na hostu proti běžícímu stacku.
+
+```bash
+make e2e-install                          # jednorázově: Node 22 (nvm), deps, prohlížeč
+make e2e                                  # všechny testy proti primární verzi
+make e2e PS=ps91                          # proti jiné verzi
+make e2e ARGS="packet-submit-flow --headed"   # konkrétní test, viditelný prohlížeč
+make e2e-report                           # HTML report z posledního běhu
+```
+
+> ⚠️ **Volá PRODUKČNÍ Packeta API** — každý běh vytvoří a zruší reálnou zásilku.
+> Testy běží sériově a po sobě uklízejí.
+
+Detail (fixture, teardown, struktura, známá omezení): [`e2e/prestashop/README.md`](e2e/prestashop/README.md).
+
 ## Architektura (proč takhle)
 Image = jen PHP runtime (`images/php81/Dockerfile`), PrestaShop core se **nepeče** —
 instaluje se přes CLI proti `src/<tag>` (přidání verze na stejném PHP = bez `docker build`).
