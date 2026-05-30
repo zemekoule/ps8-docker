@@ -70,6 +70,48 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 bind-mountnutý do **všech** verzí — edituješ jednou, projeví se ve všech běžících
 instancích. **Změny modulu commituješ do modulového repa**, ne sem.
 
+## Konfigurace modulu (`make configure`)
+Čerstvě nainstalovaná verze má modul aktivní, ale **nenastavený** — chybí Packeta
+API přihlášení (heslo, eshop id) i dopravci, a shop nese **demo data z instalace**
+(spousta zemí/zón, ukázkové produkty). `make configure` to srovná do stavu vhodného
+pro testování modulu — idempotentně, přes veřejné API PrestaShopu (žádný raw SQL),
+opakovaně spustitelné.
+
+**1. Doplň secrets do `.env`** (jednorázově, z Packeta účtu):
+```
+PACKETERY_APIPASS=…        # API heslo
+PACKETERY_ESHOP_ID=…       # eshop id
+```
+> ⚠️ Dev env volá **produkční** Packeta API — používej reálné dev credentials.
+
+**2. Spusť konfiguraci** proti běžící verzi:
+```
+make configure PS=ps82
+make configure PS=ps82 ARGS="--dry-run"   # jen vypíše, co by udělal (nic nezmění)
+```
+
+Co engine nastaví (pořadí = závislosti):
+- **module-essentials** — API heslo, eshop id, povolené COD platby
+- **locations** — sřízne zóny/země na profil (CZ, SK); ostatní demo země deaktivuje *(enforce exact set)*
+- **carriers** — stáhne dostupné Zásilkovna dopravce (cron) + přidá PS dopravce s mapováním *(aditivní dle `packeta_id`)*
+- **products** — nahradí demo produkty vlastními testovacími *(enforce exact set — smaže existující, vytvoří deklarované)*
+
+### Profil (co se nastaví)
+Cílový stav je deklarativní YAML v `tools/profiles/`:
+- `base.yml` — sdílený profil (zóny, dopravci, produkty, COD platby)
+- `ps<tag>.yml` — per-verze override nad base
+
+Listy zón/zemí/produktů jsou **„enforce exact set"** (co je v profilu = cílový stav,
+zbytek se srovná). **Dopravci jsou výjimka — aditivní** (přidáváš postupně dle `packeta_id`).
+
+### `make carriers` — discovery dopravců
+Vypíše dostupné Zásilkovna dopravce (read-only) — odsud bereš `packeta_id` do profilu:
+```
+make carriers PS=ps82
+make carriers PS=ps82 COUNTRY=cz
+make carriers PS=ps82 REFRESH=1     # čerstvý feed
+```
+
 ## Služby
 | služba | URL |
 |---|---|
