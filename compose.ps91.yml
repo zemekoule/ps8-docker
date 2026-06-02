@@ -1,0 +1,28 @@
+# Verze ps91 = PrestaShop 9.1.3 classic (jediná stažitelná 9.x distribuce).
+# PS_ZIP_URL čte bin/download pro populaci ./src/ps91 (host-side, ne kontejner).
+services:
+  ps91:
+    extends:
+      file: compose.base-ps.yml
+      service: ps-template
+    container_name: ps91
+    environment:
+      DB_NAME: prestashop_ps91
+      PS_DOMAIN: ps91.localhost
+      PS_VERSION: "9.1.3-5.0"
+      PS_ZIP_URL: "https://api.prestashop-project.org/assets/prestashop-classic/9.1.3-5.0/prestashop.zip"
+      PHP_IDE_CONFIG: "serverName=ps91.local"
+      PS_SHOP_NAME: ps91             # název obchodu → rozlišení verzí v Mailpitu (subjekt "… [ps91]"); aplikuje bin/up
+    volumes:
+      - ./src/ps91:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ps91.rule=Host(`ps91.localhost`)"
+      - "traefik.http.routers.ps91.entryPoints=web"
+      - "traefik.http.services.ps91.loadbalancer.server.port=80"
+    networks: [prestashop_network]
+
+# Viz compose.ps82.yml — per-verze projekt nad sdílenou external sítí (infra).
+networks:
+  prestashop_network:
+    external: true

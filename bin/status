@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Přehled: definované verze (compose.<tag>.yml) vs. běžící + URL.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+DEFAULT_PS="$(grep -E '^DEFAULT_PS=' .env | cut -d= -f2)"
+
+echo "PS verze:"
+for f in compose.*.yml; do
+  [ "$f" = "compose.base-ps.yml" ] && continue
+  tag="${f#compose.}"; tag="${tag%.yml}"
+  dom="$(grep -E 'PS_DOMAIN:' "$f" | sed -E 's/.*PS_DOMAIN: *"?([^"]+)"?.*/\1/')"
+  mark=""; [ "$tag" = "$DEFAULT_PS" ] && mark="*"
+  if [ -n "$(docker ps --filter "name=^${tag}\$" --format '{{.ID}}')" ]; then
+    state="● běží  → http://$dom"
+  else
+    state="○ stopnuto"
+  fi
+  printf "  %-10s %s\n" "${tag}${mark}" "$state"
+done
+echo "  (* = primární / DEFAULT_PS)"

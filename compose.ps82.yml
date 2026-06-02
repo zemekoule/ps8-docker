@@ -1,0 +1,30 @@
+# Verze ps82 = nejnovější PrestaShop 8.2.x (běžná distribuce).
+# PS_ZIP_URL čte bin/download pro populaci ./src/ps82 (host-side, ne kontejner).
+services:
+  ps82:
+    extends:
+      file: compose.base-ps.yml
+      service: ps-template
+    container_name: ps82
+    environment:
+      DB_NAME: prestashop_ps82
+      PS_DOMAIN: ps82.localhost
+      PS_VERSION: "8.2.6"
+      PS_ZIP_URL: "https://api.prestashop-project.org/assets/prestashop/8.2.6/prestashop.zip"
+      PHP_IDE_CONFIG: "serverName=ps82.local"
+      PS_SHOP_NAME: ps82             # název obchodu → rozlišení verzí v Mailpitu (subjekt "… [ps82]"); aplikuje bin/up
+    volumes:
+      - ./src/ps82:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ps82.rule=Host(`ps82.localhost`)"
+      - "traefik.http.routers.ps82.entryPoints=web"
+      - "traefik.http.services.ps82.loadbalancer.server.port=80"
+    networks: [prestashop_network]
+
+# Každá verze = vlastní compose projekt (-p ps82) nad sdílenou external sítí,
+# kterou vytváří infra (docker-compose.yml). Tím odpadají „orphan" varování
+# a každá verze má nezávislý lifecycle.
+networks:
+  prestashop_network:
+    external: true

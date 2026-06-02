@@ -1,0 +1,40 @@
+# Sdílený profil nastavení (fáze 2). Per-verze odchylky v ps<tag>.yml (override).
+# Secrets (API heslo PACKETERY_APIPASS, eshop id PACKETERY_ESHOP_ID) NEJSOU tady — jdou z .env.
+# Listy (zones/countries/carriers/products/cod_payments) = "enforce exact set":
+# co je v profilu = cílový stav, skript srovná (smaže ostatní).
+
+# Modulová ps_configuration nastavení (plain nebo JSON-string). Doplní F2-2.
+module:
+  # label_format: "A6 on A4"
+  # default_package_weight: "1"
+
+# module_name platebních modulů = dobírka (COD). ps_cashondelivery = nativní PS COD modul.
+# Per-verze override v ps<tag>.yml, pokud se dostupné platby liší.
+cod_payments:
+  - ps_cashondelivery
+
+# Lokace (F2-3). "enforce exact set": jen tyto zóny/země zůstanou aktivní, zbytek se srovná.
+# Pořadí aplikace: zóny → země (active + zóna) → smazání nedeklarovaných zón.
+# Uprav podle toho, které země zrovna testuješ.
+locations:
+  zones:
+    - "Česká republika"
+    - "Slovensko"
+  countries:
+    - { iso: CZ, zone: "Česká republika" }
+    - { iso: SK, zone: "Slovensko" }
+
+# PS dopravci + mapování na Zásilkovna dopravce (F2-4 část 2). ADITIVNÍ + idempotentní
+# dle packeta_id (nemaže nedeklarované — přidáváš postupně). Minimální: name + packeta_id;
+# zóny (z country dopravce), typ/validace/vendory se ODVODÍ. packeta_id viz `make carriers`.
+carriers:
+  - { name: "Zásilkovna – výdejní místa", packeta_id: zpoint }
+  - { name: "Zásilkovna – doručení domů", packeta_id: 106 }
+
+# Testovací produkty — seed, enforce exact set (F2-5). Cena bez desetin/realistická,
+# váha s/bez (vynech klíč weight), adult u 1-2. Uprav dle potřeby testů.
+products:
+  - { name: "Test lehký", price: 290, weight: 0.5 }
+  - { name: "Test těžký", price: 1990, weight: 8 }
+  - { name: "Test bez váhy", price: 590 }
+  - { name: "Test dospělý", price: 1290, weight: 2, adult: true }

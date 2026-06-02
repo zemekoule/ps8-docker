@@ -1,0 +1,33 @@
+# Verze ps178 = PrestaShop 1.7.8.x (na PHP 7.4). Přidáno kvůli ověření cross-version
+# předpokladů fáze 2 (boot PS + modulový DI + ObjectModely na 1.7).
+# Přepisuje build na php74 image + xdebug 3.1.6 (template míří na php81/3.4.5).
+services:
+  ps178:
+    extends:
+      file: compose.base-ps.yml
+      service: ps-template
+    container_name: ps178
+    build:
+      context: ./images/php74
+      args:
+        PHP_BASE_TAG: 7.4-apache
+        XDEBUG_VERSION: 3.1.6
+    environment:
+      DB_NAME: prestashop_ps178
+      PS_DOMAIN: ps178.localhost
+      PS_VERSION: "1.7.8.11"
+      PS_ZIP_URL: "https://api.prestashop-project.org/assets/prestashop/1.7.8.11/prestashop.zip"
+      PHP_IDE_CONFIG: "serverName=ps178.local"
+      PS_SHOP_NAME: ps178            # název obchodu → rozlišení verzí v Mailpitu (subjekt "… [ps178]"); aplikuje bin/up
+    volumes:
+      - ./src/ps178:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ps178.rule=Host(`ps178.localhost`)"
+      - "traefik.http.routers.ps178.entryPoints=web"
+      - "traefik.http.services.ps178.loadbalancer.server.port=80"
+    networks: [prestashop_network]
+
+networks:
+  prestashop_network:
+    external: true

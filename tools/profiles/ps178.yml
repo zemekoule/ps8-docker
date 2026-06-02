@@ -1,0 +1,2 @@
+# Odchylky pro ps178 (PS 1.7.8.x na PHP 7.4) — override nad base.yml.
+# Doplní se v F2-3..F2-5 (pozor na rozdíly API 1.7 vs 8/9). cod_payments dědí z base.

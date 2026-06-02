@@ -1,0 +1,5 @@
+# Odchylky pro ps82 (PS 8.2.x) — override nad base.yml.
+# Doplní se v F2-3..F2-5 (dopravci, produkty). cod_payments dědí z base (ps_cashondelivery).
+# Override jen pokud se dostupné platby liší:
+# cod_payments:
+#   - ps_cashondelivery

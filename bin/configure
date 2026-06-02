@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Aplikuje post-install nastavení na verzi <tag> (engine tools/configure.php v kontejneru).
+# Secrets (API heslo, eshop id) načte z .env a předá jen do tohoto exec (ne do container env natrvalo).
+set -euo pipefail
+TAG="${1:?usage: bin/configure <tag> [--dry-run]}"
+shift || true
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+docker ps --filter "name=^${TAG}\$" --format '{{.ID}}' | grep -q . || { echo "✗ kontejner $TAG neběží (make up PS=$TAG)"; exit 1; }
+
+# secrets z .env (gitignored)
+set -a; [ -f .env ] && . ./.env; set +a
+
+docker exec \
+  -e PACKETERY_APIPASS="${PACKETERY_APIPASS:-}" \
+  -e PACKETERY_ESHOP_ID="${PACKETERY_ESHOP_ID:-}" \
+  -e PS_TAG="$TAG" \
+  -w /var/www/html "$TAG" \
+  php /var/www/dev-tools/configure.php --profile="$TAG" "$@"

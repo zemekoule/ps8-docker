@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Discovery: vypíše dostupné Zásilkovna dopravce pro verzi <tag> (read-only).
+#   bin/carriers <tag> [--country=xx] [--refresh]
+set -euo pipefail
+TAG="${1:?usage: bin/carriers <tag> [--country=xx] [--refresh]}"
+shift || true
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+docker ps --filter "name=^${TAG}\$" --format '{{.ID}}' | grep -q . || { echo "✗ kontejner $TAG neběží (make up PS=$TAG)"; exit 1; }
+
+# API heslo z .env (pro případný download)
+set -a; [ -f .env ] && . ./.env; set +a
+
+docker exec \
+  -e PACKETERY_APIPASS="${PACKETERY_APIPASS:-}" \
+  -w /var/www/html "$TAG" \
+  php /var/www/dev-tools/carriers.php "$@"
