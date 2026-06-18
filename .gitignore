@@ -5,8 +5,10 @@
 /modules/
 /src/
 /CLAUDE.md
-/.notes/
+/.notes
 /.claude/worktrees/
+/.claude/commands
 /.claude/settings.local.json
+/.private/
 .DS_Store
 /prestashop-db-backup-*.sql
