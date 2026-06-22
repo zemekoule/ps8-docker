@@ -59,6 +59,7 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 | `make php PS=ps91 ARGS="bin/console …"` | php CLI |
 | `make xdebug PS=ps91 ARGS="…"` | php CLI s Xdebug session |
 | `make check` / `make fix` | QA modulu (`composer check:all` / `fix:all`) |
+| `make api-stage` / `make api-prod` | přepne SOAP/WSDL cíl modulu na Packeta stage / zpět na prod (per verze přes `PS=`) |
 
 ### Přidání nové verze
 1. zkopíruj existující `compose.<tag>.yml` → nový tag, uprav `PS_VERSION`, `PS_ZIP_URL`,
@@ -69,6 +70,27 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 Žije v `modules/prestashop/packetery` (vlastní git repo `Zasilkovna/prestashop`),
 bind-mountnutý do **všech** verzí — edituješ jednou, projeví se ve všech běžících
 instancích. **Změny modulu commituješ do modulového repa**, ne sem.
+
+## SOAP/WSDL cíl modulu (`make api-stage` / `api-prod`)
+Modul standardně volá Packeta SOAP API na **produkční** WSDL URL (natvrdo v kódu modulu).
+Pro testování proti **stage** prostředí ho lze lokálně přepnout bez editace zdrojáku — přes
+override konstantu `_PACKETERY_SOAP_WSDL_URL_` v `config/defines_custom.inc.php` dané verze
+(PES-3249; PS hook mimo modul, mimo distribuci).
+
+**1. Doplň stage URL do `.env`** (jednorázově):
+```
+PACKETERY_SOAP_STAGE_WSDL_URL=…   # WSDL URL stage prostředí
+```
+> ⚠️ Stage je za **VPN** — bez ní se na URL nedostaneš (modul při volání spadne na timeout).
+
+**2. Přepínej** (per verze přes `PS=`, default `DEFAULT_PS`; bez restartu kontejneru):
+```
+make api-stage            # ps82 → stage
+make api-prod             # ps82 → zpět na prod (override se odstraní)
+make api-stage PS=ps91    # jiná verze
+```
+Platí pro **veškerou** SOAP komunikaci modulu naráz. `api-prod` jen smaže override blok — soubor se
+vrátí do původního stavu.
 
 ## Konfigurace modulu (`make configure`)
 Čerstvě nainstalovaná verze má modul aktivní, ale **nenastavený** — chybí Packeta

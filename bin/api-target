@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Přepne lokální SOAP/WSDL cíl modulu pro verzi <tag> mezi stage a prod (PES-3249).
+# Spravuje override konstantu _PACKETERY_SOAP_WSDL_URL_ v src/<tag>/config/defines_custom.inc.php
+# (PS hook mimo modul, mimo distribuci). Idempotentní — vlastní blok mezi značkami, zbytek souboru netkne.
+#   stage = zapíše URL z .env (PACKETERY_SOAP_STAGE_WSDL_URL)
+#   prod  = override odstraní → modul jede na výchozí produkční const ze SoapApi::WSDL_URL
+# Žádný restart kontejneru: PS čte defines_custom.inc.php na každém requestu.
+set -euo pipefail
+TAG="${1:?usage: bin/api-target <tag> <stage|prod>}"
+MODE="${2:?usage: bin/api-target <tag> <stage|prod>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+
+FILE="src/$TAG/config/defines_custom.inc.php"
+[ -f "$FILE" ] || { echo "✗ $FILE neexistuje — je verze nainstalovaná? (make up PS=$TAG)"; exit 1; }
+
+START="// >>> packetery-dev SOAP WSDL override (managed by make api-stage/api-prod) — NEcommitovat"
+END="// <<< packetery-dev SOAP WSDL override"
+
+# Soubor bez stávajícího managed bloku (značky včetně). Command substitution zároveň ořízne
+# koncové prázdné řádky, takže se separátor mezi opakovaným přepínáním nehromadí.
+content="$(awk -v s="$START" -v e="$END" '
+  index($0, s) { skip = 1 }
+  skip == 0    { print }
+  index($0, e) { skip = 0 }
+' "$FILE")"
+
+case "$MODE" in
+  stage)
+    set -a; [ -f .env ] && . ./.env; set +a
+    URL="${PACKETERY_SOAP_STAGE_WSDL_URL:-}"
+    [ -n "$URL" ] || { echo "✗ PACKETERY_SOAP_STAGE_WSDL_URL není v .env — doplň stage WSDL URL"; exit 1; }
+    {
+      printf '%s\n' "$content"
+      printf '\n%s\n' "$START"
+      printf "define('_PACKETERY_SOAP_WSDL_URL_', '%s');\n" "$URL"
+      printf '%s\n' "$END"
+    } > "$FILE"
+    echo "✅ $TAG → STAGE  ($URL)"
+    ;;
+  prod)
+    printf '%s\n' "$content" > "$FILE"
+    echo "✅ $TAG → PROD  (výchozí produkční WSDL z modulu)"
+    ;;
+  *)
+    echo "✗ neznámý režim: $MODE (použij stage|prod)"; exit 1
+    ;;
+esac
