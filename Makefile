@@ -5,7 +5,7 @@ export
 
 PS ?= $(DEFAULT_PS)
 
-.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix configure carriers e2e e2e-install e2e-report
+.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix configure carriers api-stage api-prod e2e e2e-install e2e-report
 
 up:         ; bin/up $(PS)
 configure:  ; bin/configure $(PS) $(ARGS)        # post-install nastavení (fáze 2); ARGS="--dry-run" jen vypíše
@@ -27,6 +27,13 @@ xdebug:     ; docker exec -it $(PS) su --shell /bin/bash www-data --command "XDE
 # QA modulu (composer skripty v dev toolingu):
 check:      ; docker exec $(PS) bash -c "cd /var/www/packetery-dev/ && composer check:all"
 fix:        ; docker exec $(PS) bash -c "cd /var/www/packetery-dev/ && composer fix:all"
+
+# Lokální SOAP/WSDL cíl modulu (override _PACKETERY_SOAP_WSDL_URL_, PES-3249). Bez restartu kontejneru.
+#   make api-stage              # DEFAULT_PS → stage (URL z .env PACKETERY_SOAP_STAGE_WSDL_URL)
+#   make api-prod               # DEFAULT_PS → zpět na výchozí produkční URL
+#   make api-stage PS=ps91      # vybraná verze
+api-stage:  ; bin/api-target $(PS) stage
+api-prod:   ; bin/api-target $(PS) prod
 
 # E2E testy (Playwright) modulu Packeta — běží na hostu pod Node z .nvmrc.
 #   make e2e                      # všechny testy proti DEFAULT_PS
