@@ -59,6 +59,7 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 | `make php PS=ps91 ARGS="bin/console …"` | php CLI |
 | `make xdebug PS=ps91 ARGS="…"` | php CLI s Xdebug session |
 | `make check` / `make fix` | QA modulu (`composer check:all` / `fix:all`) |
+| `make translations` | nepřeložené (missing) + osiřelé (orphan) CZ/SK stringy modulu na aktuální větvi |
 | `make api-stage` / `make api-prod` | přepne SOAP/WSDL cíl modulu na Packeta stage / zpět na prod (per verze přes `PS=`) |
 
 ### Přidání nové verze
@@ -70,6 +71,19 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 Žije v `modules/prestashop/packetery` (vlastní git repo `Zasilkovna/prestashop`),
 bind-mountnutý do **všech** verzí — edituješ jednou, projeví se ve všech běžících
 instancích. **Změny modulu commituješ do modulového repa**, ne sem.
+
+### Kontrola překladů (`make translations`)
+Modul používá starý hashovaný systém překladů (`$_MODULE`). `make translations`
+projde `l()` volání v PHP i `{l s=…}` v šablonách, spočítá klíče stejně jako jádro
+PrestaShopu a porovná je s `cs.php`/`sk.php`:
+
+- **missing** — string v kódu bez záznamu v překladu → na frontu/v adminu svítí anglicky;
+- **orphan** — záznam v překladu, který žádný `l()` negeneruje → typicky přejmenovaný
+  nebo překlepnutý `source` argument (osiřelý překlad se přestane trefovat).
+
+Scan čte **živý working tree**, takže výsledek vždy odpovídá větvi, na které zrovna jsi
+(`make translations` proti `DEFAULT_PS`, `make translations PS=ps91` proti jiné verzi —
+verze PS na výsledek nemá vliv, kontejner je jen interpreter).
 
 ## SOAP/WSDL cíl modulu (`make api-stage` / `api-prod`)
 Modul standardně volá Packeta SOAP API na **produkční** WSDL URL (natvrdo v kódu modulu).
