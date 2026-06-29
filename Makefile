@@ -5,7 +5,7 @@ export
 
 PS ?= $(DEFAULT_PS)
 
-.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix translations configure carriers api-stage api-prod e2e e2e-install e2e-report
+.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix translations configure carriers api-stage api-prod au-new-version au-requirements au-modules e2e e2e-install e2e-report
 
 up:         ; bin/up $(PS)
 configure:  ; bin/configure $(PS) $(ARGS)        # post-install nastavení (fáze 2); ARGS="--dry-run" jen vypíše
@@ -38,6 +38,15 @@ translations: ; docker exec $(PS) php /var/www/dev-tools/extract-missing-transla
 #   make api-stage PS=ps91      # vybraná verze
 api-stage:  ; bin/api-target $(PS) stage
 api-prod:   ; bin/api-target $(PS) prod
+
+# Upgrade modul (autoupgrade) CLI — ad-hoc dotazy k upgradu PS (vyžaduje běžící kontejner;
+# modul je v src/<tag>/modules/autoupgrade pro PS8/9). Admin dir = PS_FOLDER_ADMIN z .env.
+#   make au-new-version                 # dostupné PS updaty pro DEFAULT_PS
+#   make au-requirements PS=ps82 ARGS="--channel=local --zip=… --xml=…"
+#   make au-modules PS=ps82
+au-new-version:  ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console update:check-new-version $(PS_FOLDER_ADMIN) $(ARGS)"
+au-requirements: ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console update:check-requirements $(PS_FOLDER_ADMIN) $(ARGS)"
+au-modules:      ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console update:check-modules $(PS_FOLDER_ADMIN) $(ARGS)"
 
 # E2E testy (Playwright) modulu Packeta — běží na hostu pod Node z .nvmrc.
 #   make e2e                      # všechny testy proti DEFAULT_PS
