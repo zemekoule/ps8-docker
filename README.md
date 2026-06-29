@@ -13,7 +13,7 @@ sdílený MariaDB (schéma per verze), Adminer + Mailpit, routing přes Traefik.
 bin/setup        # naklonuje modul, připraví .env, nahodí primární verzi
 make status      # přehled verzí + URL
 ```
-Po dokončení: http://ps82.localhost (storefront), `/admin1234` (back office).
+Po dokončení: http://ps91.localhost (storefront), `/admin1234` (back office).
 
 ## Každodenní práce (start / stop / restart)
 Scénáře, jak to ovládat. Data (`db/`, `src/`) se stop/startem **neztrácí** — maže je jen `make drop`.
@@ -32,8 +32,8 @@ make status
 - *Po restartu Dockeru, když jsi nedělal `down`:* nic — naběhlo samo, ověř `make status`.
 - *Po `make down-all` (nebo poprvé):*
   ```
-  make up              # infra + primární verze (ps82)
-  make up PS=ps91      # přidá 9.1.3 souběžně
+  make up              # infra + primární verze (ps91)
+  make up PS=ps82      # přidá 8.2.x souběžně
   ```
   Neinstaluje se znovu (data jsou) → jen rychlý start.
 
@@ -53,7 +53,7 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 | `make up PS=ps91` | nahodí jinou verzi (běží **souběžně**) |
 | `make status` | definované vs. běžící verze + URL |
 | `make down PS=ps91` | shodí verzi (data zůstanou) |
-| `make drop PS=ps91` | **nevratně** smaže verzi (schéma + `src/` + image); primární odmítne |
+| `make drop PS=ps82` | **nevratně** smaže verzi (schéma + `src/` + image); primární odmítne |
 | `make logs PS=ps91` | logy verze |
 | `make shell PS=ps91` | bash v kontejneru (www-data) |
 | `make php PS=ps91 ARGS="bin/console …"` | php CLI |
@@ -99,9 +99,9 @@ PACKETERY_SOAP_STAGE_WSDL_URL=…   # WSDL URL stage prostředí
 
 **2. Přepínej** (per verze přes `PS=`, default `DEFAULT_PS`; bez restartu kontejneru):
 ```
-make api-stage            # ps82 → stage
-make api-prod             # ps82 → zpět na prod (override se odstraní)
-make api-stage PS=ps91    # jiná verze
+make api-stage            # ps91 → stage
+make api-prod             # ps91 → zpět na prod (override se odstraní)
+make api-stage PS=ps82    # jiná verze
 ```
 Platí pro **veškerou** SOAP komunikaci modulu naráz. `api-prod` jen smaže override blok — soubor se
 vrátí do původního stavu.
