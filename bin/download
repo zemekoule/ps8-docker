@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Naplní ./src/<tag> PrestaShop core (host-side, přes one-shot base kontejner,
-# který umí curl+unzip+ps-extractor). Idempotentní: když je src/<tag> neprázdný, přeskočí.
+# Naplní ./src/<tag> PrestaShop core + upgrade modul (autoupgrade), host-side přes
+# one-shot base kontejner (curl+unzip+ps-extractor). Idempotentní: hotové části přeskočí.
 set -euo pipefail
 TAG="${1:?usage: bin/download <tag>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,20 +8,45 @@ FRAG="$ROOT/compose.$TAG.yml"
 [ -f "$FRAG" ] || { echo "✗ neznámá verze: chybí $FRAG"; exit 1; }
 
 SRC="$ROOT/src/$TAG"
+
+# Verze upgrade modulu (PrestaShop/autoupgrade). v7.x pokrývá PS8 i PS9.
+AUTOUPGRADE_VERSION="v7.6.5"
+AUTOUPGRADE_URL="https://github.com/PrestaShop/autoupgrade/releases/download/${AUTOUPGRADE_VERSION}/autoupgrade-${AUTOUPGRADE_VERSION}.zip"
+
+# --- 1) PS core do src/<tag> ---
 if [ -d "$SRC" ] && [ -n "$(ls -A "$SRC" 2>/dev/null)" ]; then
-  echo "✓ src/$TAG už je naplněn — download přeskočen"
-  exit 0
+  echo "✓ src/$TAG už je naplněn — core download přeskočen"
+else
+  ZIP_URL="$(grep -E 'PS_ZIP_URL:' "$FRAG" | sed -E 's/.*PS_ZIP_URL: *"?([^"]+)"?.*/\1/')"
+  [ -n "$ZIP_URL" ] || { echo "✗ PS_ZIP_URL nenalezen v $FRAG"; exit 1; }
+
+  echo "⇣ stahuji PS core pro $TAG: $ZIP_URL"
+  mkdir -p "$SRC"
+  docker run --rm -e PS_ZIP_URL="$ZIP_URL" -v "$SRC":/out prestashop/base:8.1-apache bash -c '
+    set -e
+    curl -fSL "$PS_ZIP_URL" -o /tmp/prestashop.zip
+    mkdir -p /tmp/data-ps && unzip -q /tmp/prestashop.zip -d /tmp/data-ps/
+    bash /tmp/ps-extractor.sh /tmp/data-ps
+    cp -R -p /tmp/data-ps/prestashop/. /out/'
+  echo "✓ src/$TAG naplněn"
 fi
 
-ZIP_URL="$(grep -E 'PS_ZIP_URL:' "$FRAG" | sed -E 's/.*PS_ZIP_URL: *"?([^"]+)"?.*/\1/')"
-[ -n "$ZIP_URL" ] || { echo "✗ PS_ZIP_URL nenalezen v $FRAG"; exit 1; }
-
-echo "⇣ stahuji PS core pro $TAG: $ZIP_URL"
-mkdir -p "$SRC"
-docker run --rm -e PS_ZIP_URL="$ZIP_URL" -v "$SRC":/out prestashop/base:8.1-apache bash -c '
-  set -e
-  curl -fSL "$PS_ZIP_URL" -o /tmp/prestashop.zip
-  mkdir -p /tmp/data-ps && unzip -q /tmp/prestashop.zip -d /tmp/data-ps/
-  bash /tmp/ps-extractor.sh /tmp/data-ps
-  cp -R -p /tmp/data-ps/prestashop/. /out/'
-echo "✓ src/$TAG naplněn"
+# --- 2) upgrade modul (autoupgrade) do src/<tag>/modules ---
+# Musí být přítomen i po čisté instalaci (drop+up), jinak `make upgrade` nepojede.
+# Jen PS8/PS9 — 1.7 (ps178) je mimo scope upgradu a v7 autoupgrade ji nepodporuje.
+PS_MAJOR="$(grep -E 'PS_VERSION:' "$FRAG" | sed -E 's/.*PS_VERSION: *"?([0-9]+)\..*/\1/')"
+if [ "$PS_MAJOR" = "8" ] || [ "$PS_MAJOR" = "9" ]; then
+  if [ -f "$SRC/modules/autoupgrade/bin/console" ]; then
+    echo "✓ autoupgrade už je v src/$TAG/modules — přeskočeno"
+  else
+    echo "⇣ stahuji upgrade modul autoupgrade $AUTOUPGRADE_VERSION"
+    mkdir -p "$SRC/modules"
+    docker run --rm -e AU_URL="$AUTOUPGRADE_URL" -v "$SRC/modules":/mods prestashop/base:8.1-apache bash -c '
+      set -e
+      curl -fSL "$AU_URL" -o /tmp/au.zip
+      unzip -q /tmp/au.zip -d /mods/'
+    echo "✓ autoupgrade doplněn do src/$TAG/modules"
+  fi
+else
+  echo "• autoupgrade přeskočen (PS major $PS_MAJOR mimo scope upgradu)"
+fi
