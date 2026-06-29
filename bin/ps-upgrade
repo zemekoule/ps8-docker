@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# make ps-upgrade <tag>: in-place upgrade PrestaShopu v rámci majoru přes autoupgrade modul.
+# Vypíše aktuální verzi + nabízené updaty (z update:check-new-version), k VÝBĚRU dá jen
+# same-major (Type != major; major zobrazí jako nevybíratelný), po potvrzení udělá zálohu
+# a spustí update:start. Data zůstávají (reálná migrace, ne reinstall).
+set -euo pipefail
+TAG="${1:?usage: bin/ps-upgrade <tag>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+
+# kontejner musí běžet + modul musí být přítomen
+docker ps --filter "name=^${TAG}\$" --format '{{.ID}}' | grep -q . \
+  || { echo "✗ kontejner $TAG neběží — spusť: make up PS=$TAG"; exit 1; }
+docker exec "$TAG" test -f /var/www/html/modules/autoupgrade/bin/console \
+  || { echo "✗ autoupgrade modul chybí v $TAG (jen PS8/9) — spusť: bin/download $TAG"; exit 1; }
+
+ADMIN="$(grep -E '^PS_FOLDER_ADMIN=' .env | cut -d= -f2)"
+
+# autoupgrade CLI v kontejneru (jako www-data, z adresáře modulu)
+au() { docker exec -w /var/www/html/modules/autoupgrade "$TAG" su www-data -s /bin/bash -c "$1"; }
+
+# --- aktuální verze (z DB: PS_VERSION_DB = nainstalovaná/migrovaná verze) ---
+DB_NAME="$(docker exec "$TAG" printenv DB_NAME 2>/dev/null || true)"
+DB_PREFIX="$(docker exec "$TAG" printenv DB_PREFIX 2>/dev/null || echo ps_)"
+CURRENT="$(docker exec dev_db mariadb -u root -pasdf "$DB_NAME" -N -e \
+  "SELECT value FROM ${DB_PREFIX}configuration WHERE name='PS_VERSION_DB' LIMIT 1;" 2>/dev/null || true)"
+echo "Aktuální verze ($TAG): ${CURRENT:-?}"
+
+# --- dostupné updaty ---
+echo "▸ zjišťuji dostupné aktualizace…"
+RAW="$(au "php bin/console update:check-new-version $ADMIN" 2>/dev/null || true)"
+
+# parse data řádků tabulky: | Version | Channel | Type | Information |
+SEL_VER=(); SEL_CH=(); ANY=0
+echo ""
+echo "Nabízené aktualizace:"
+while IFS=$'\t' read -r ver ch typ; do
+  [ -z "$ver" ] && continue
+  ANY=1
+  if [ "$typ" = "major" ]; then
+    printf "       %-9s %-7s %s\n" "$ver" "$typ" "← přeskok majoru, nenabízím"
+  else
+    SEL_VER+=("$ver"); SEL_CH+=("$ch")
+    printf "  [%d]  %-9s %-7s (%s)\n" "${#SEL_VER[@]}" "$ver" "$typ" "$ch"
+  fi
+done < <(echo "$RAW" | grep -E '^\|' | grep -vE '^\| *Version' | awk -F'|' '{
+  v=$2; c=$3; t=$4;
+  gsub(/^[ \t]+|[ \t]+$/,"",v); gsub(/^[ \t]+|[ \t]+$/,"",c); gsub(/^[ \t]+|[ \t]+$/,"",t);
+  if (v != "") print v "\t" c "\t" t }')
+
+if [ "$ANY" -eq 0 ]; then
+  echo "  (žádné)"
+  echo ""
+  echo "✓ máš nejnovější verzi — není co upgradovat."
+  exit 0
+fi
+if [ "${#SEL_VER[@]}" -eq 0 ]; then
+  echo ""
+  echo "✓ žádná same-major aktualizace k dispozici (výše je jen major — ten záměrně nenabízím)."
+  exit 0
+fi
+
+# --- výběr ---
+echo ""
+printf "Vyber verzi k upgradu [1-%d], Enter = konec: " "${#SEL_VER[@]}"
+read -r choice
+[ -z "${choice:-}" ] && { echo "konec — nic neměním."; exit 0; }
+case "$choice" in *[!0-9]*) echo "✗ neplatná volba"; exit 1;; esac
+{ [ "$choice" -ge 1 ] && [ "$choice" -le "${#SEL_VER[@]}" ]; } || { echo "✗ mimo rozsah"; exit 1; }
+idx=$((choice-1))
+TARGET="${SEL_VER[$idx]}"; CHANNEL="${SEL_CH[$idx]}"
+
+echo ""
+echo "▸ upgrade $TAG: ${CURRENT:-?} → $TARGET  (kanál $CHANNEL)"
+
+# --- pre-flight: prerekvizity ---
+echo "▸ kontrola prerekvizit (update:check-requirements)…"
+au "php bin/console update:check-requirements $ADMIN --channel=$CHANNEL" \
+  || { echo "✗ prerekvizity nesplněny — upgrade nespouštím (viz výpis výše)."; exit 1; }
+
+# --- záloha (pojistka: no data loss) ---
+echo "▸ záloha před upgradem (backup:create)…"
+au "php bin/console backup:create $ADMIN" \
+  || { echo "✗ záloha selhala — upgrade nespouštím."; exit 1; }
+echo "  záloha uložena v: src/$TAG/$ADMIN/autoupgrade/backup/"
+
+# --- dočasně vypnout dev režim ---
+# V dev módu PS regeneruje var/cache/dev při každém bootu → autoupgrade CacheCleaner padá
+# na „Directory not empty". Po dobu upgradu dev vypneme, na konci vrátíme původní stav.
+PREV_DEV="$(bin/dev "$TAG" status 2>/dev/null || echo '?')"
+restore_dev() { case "${PREV_DEV:-}" in on|off) bin/dev "$TAG" "$PREV_DEV" >/dev/null 2>&1 || true ;; esac; }
+trap restore_dev EXIT
+echo "▸ vypínám dev režim po dobu upgradu (po něm vrátím původní stav)…"
+bin/dev "$TAG" off >/dev/null
+
+# --- upgrade ---
+# --disable-non-native-modules=0: nevypínej nemarketplace moduly (náš packetery autoupgrade
+# neumí ověřit přes Marketplace API → jinak ho deaktivuje).
+echo "▸ spouštím update:start — může chvíli běžet, postupuje po krocích…"
+if au "php bin/console update:start $ADMIN --channel=$CHANNEL --disable-non-native-modules=0"; then
+  NEW="$(docker exec dev_db mariadb -u root -pasdf "$DB_NAME" -N -e \
+    "SELECT value FROM ${DB_PREFIX}configuration WHERE name='PS_VERSION_DB' LIMIT 1;" 2>/dev/null || true)"
+  echo ""
+  echo "✅ upgrade hotový — verze v DB: ${NEW:-?} (cíl $TARGET)"
+  echo "   ověř i: make au-new-version PS=$TAG  (prázdno = nejnovější)"
+else
+  echo ""
+  echo "✗ update:start selhal. Rollback ze zálohy:"
+  echo "    docker exec -w /var/www/html/modules/autoupgrade $TAG su www-data -s /bin/bash -c \"php bin/console backup:list $ADMIN\""
+  echo "    docker exec -w /var/www/html/modules/autoupgrade $TAG su www-data -s /bin/bash -c \"php bin/console backup:restore $ADMIN --backup=<NÁZEV>\""
+  echo "   logy: src/$TAG/$ADMIN/autoupgrade/logs/   (nouzově: make drop $TAG && make up PS=$TAG)"
+  exit 1
+fi

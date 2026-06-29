@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Přepíná PS dev režim (_PS_MODE_DEV_) verze <tag>. Spravuje vlastní blok v
+# src/<tag>/config/defines_custom.inc.php — což je tentýž soubor, který upřednostňuje i admin
+# UI (Pokročilé parametry → Výkon → Debug režim), takže UI i `make` sahají na stejné místo.
+# Funguje, protože dev NEforcujeme env varem (PS_DEV_MODE=0) a custom se načítá před defines.inc.php
+# (config.inc.php), takže náš define vyhraje. Bez restartu (čte se na každém requestu).
+#   bin/dev <tag> on|off|status
+set -euo pipefail
+TAG="${1:?usage: bin/dev <tag> <on|off|status>}"
+MODE="${2:?usage: bin/dev <tag> <on|off|status>}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+[ -f "compose.$TAG.yml" ] || { echo "✗ neznámá verze: compose.$TAG.yml"; exit 1; }
+
+FILE="src/$TAG/config/defines_custom.inc.php"
+[ -f "$FILE" ] || { echo "✗ $FILE neexistuje — je verze nainstalovaná? (make up PS=$TAG)"; exit 1; }
+
+START="// >>> packetery-dev DEV MODE (managed by make dev-on/dev-off) — NEcommitovat"
+END="// <<< packetery-dev DEV MODE"
+
+# stávající hodnota z našeho bloku (true/false) — pro status
+cur="$(awk -v s="$START" -v e="$END" 'index($0,s){f=1;next} index($0,e){f=0} f' "$FILE" \
+        | grep -oE 'true|false' | head -1 || true)"
+
+write_block() {  # $1 = true|false
+  # soubor bez našeho bloku (ořízne i koncové prázdné řádky), pak připoj nový blok
+  content="$(awk -v s="$START" -v e="$END" '
+    index($0, s) { skip = 1 }
+    skip == 0    { print }
+    index($0, e) { skip = 0 }
+  ' "$FILE")"
+  {
+    printf '%s\n' "$content"
+    printf '\n%s\n' "$START"
+    printf "define('_PS_MODE_DEV_', %s);\n" "$1"
+    printf '%s\n' "$END"
+  } > "$FILE"
+}
+
+case "$MODE" in
+  on)     write_block true;  echo "✅ $TAG: dev režim ZAPNUT" ;;
+  off)    write_block false; echo "✅ $TAG: dev režim VYPNUT" ;;
+  status) case "$cur" in true) echo on;; false) echo off;; *) echo "?";; esac ;;
+  *)      echo "✗ neznámý režim: $MODE (použij on|off|status)"; exit 1 ;;
+esac

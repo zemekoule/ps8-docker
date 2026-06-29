@@ -12,6 +12,13 @@ docker compose up -d traefik mysql adminer mailpit
 
 bin/download "$TAG"
 
+# Čerstvá instalace? (schéma ještě nemá tabulky) — pak na konci zapneme dev režim.
+DB_NAME="$(grep -E 'DB_NAME:' "compose.$TAG.yml" | sed -E 's/.*DB_NAME: *"?([^" ]+)"?.*/\1/')"
+FRESH=0
+TABLES="$(docker exec dev_db mariadb -u root -pasdf -N -e \
+  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME';" 2>/dev/null || echo 0)"
+[ "${TABLES:-0}" = "0" ] && FRESH=1
+
 echo "▸ nahazuji $TAG (vlastní projekt -p $TAG)"
 # bez --build: compose postaví image jen když chybí (poprvé), jinak build přeskočí.
 # Rebuild po editaci images/php81/Dockerfile: `make build PS=$TAG`.
@@ -49,6 +56,13 @@ if [ -n "$SHOP_NAME" ]; then
   else
     echo "⚠ název obchodu se nepodařilo nastavit (nekritické)"
   fi
+fi
+
+# Čerstvá instalace → zapni dev režim (přepínatelný: make dev-on/dev-off nebo admin UI).
+# Při restartu už běžící verze dev stav neměníme (mohl sis ho přepnout).
+if [ "$FRESH" = 1 ]; then
+  echo "▸ čerstvá instalace → zapínám dev režim"
+  bin/dev "$TAG" on || echo "⚠ nastavení dev režimu se nepodařilo (nekritické)"
 fi
 
 echo ""
