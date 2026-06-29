@@ -17,7 +17,7 @@ Předpoklad: dev stack běží (`make up PS=ps82`) a fixture objednávka existuj
 
 ```bash
 make e2e-install          # jednorázově: Node 22 (nvm), npm deps, prohlížeč
-make e2e                  # spustí všechny testy proti DEFAULT_PS (ps82)
+make e2e                  # spustí všechny testy proti DEFAULT_PS (ps91)
 ```
 
 Další způsoby:
