@@ -287,13 +287,14 @@ function step_carriers(object $ctx): void
             $zids = $zone ? [$zone] : [];
         }
         $carrierId = create_ps_carrier($car['name'], $zids, $idLang);
-        [$ppt, $av, $vendors] = resolve_carrier_fields($ctx->module, $carrierId, $api, $pid);
+        [$ppt, $isCod, $av, $vendors] = resolve_carrier_fields($ctx->module, $carrierId, $api, $pid);
         $carrierRepo->setPacketeryCarrier(
             $carrierId,
             $pid,
             $api['name'] ?? $car['name'],
             $api['currency'] ?? null,
             $ppt,
+            $isCod,
             $av,
             $vendors
         );
@@ -371,6 +372,9 @@ function resolve_carrier_fields($module, int $psCarrierId, array $api, string $p
         $ppt = 'external';
     }
 
+    // is_cod — povol dobírku, pokud ji dopravce ve feedu nezakazuje (zrcadlí disallows_cod)
+    $isCod = empty($api['disallows_cod']);
+
     // address_validation (glue — pickup => null; adresní default 'none')
     $av = ($ppt === null) ? 'none' : null;
 
@@ -383,7 +387,7 @@ function resolve_carrier_fields($module, int $psCarrierId, array $api, string $p
         // fallback: bez vendorů (ověříme v testu, jestli pickup widget funguje)
     }
 
-    return [$ppt, $av, $vendors];
+    return [$ppt, $isCod, $av, $vendors];
 }
 
 /**

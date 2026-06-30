@@ -61,11 +61,79 @@ Primární verze je v `.env` (`DEFAULT_PS`).
 | `make check` / `make fix` | QA modulu (`composer check:all` / `fix:all`) |
 | `make translations` | nepřeložené (missing) + osiřelé (orphan) CZ/SK stringy modulu na aktuální větvi |
 | `make api-stage` / `make api-prod` | přepne SOAP/WSDL cíl modulu na Packeta stage / zpět na prod (per verze přes `PS=`) |
+| `make dev-on` / `make dev-off` / `make dev-status` | přepne/zjistí PS dev režim (per verze přes `PS=`) — viz níže |
+| `make ps-upgrade` | upgrade verze PS v rámci majoru (in-place, data zůstanou) — viz níže |
 
 ### Přidání nové verze
 1. zkopíruj existující `compose.<tag>.yml` → nový tag, uprav `PS_VERSION`, `PS_ZIP_URL`,
    `DB_NAME`, `PS_DOMAIN`, Traefik labely a `src/<tag>` mount.
 2. `make up PS=<tag>`.
+
+## Dev režim (`make dev-on` / `dev-off`)
+PS dev režim (`_PS_MODE_DEV_`: detailní chyby + debug lišta) je **přepínatelný** — přes make
+i admin (**Pokročilé parametry → Výkon → Debug režim**); obojí sahá na stejné místo
+(`config/defines_custom.inc.php`), takže se navzájem „vidí". Bez restartu (čte se per-request).
+```bash
+make dev-status PS=ps82      # on / off
+make dev-off PS=ps82
+make dev-on PS=ps82
+```
+Čerstvá instalace dostane dev **zapnutý** automaticky (`bin/up` zavolá `bin/dev on`).
+
+> Proč ne přes `PS_DEV_MODE` v `.env`: ta proměnná dev režim **forcuje** (a tím rozbije
+> přepínání v adminu). Proto je v `.env` schválně `PS_DEV_MODE=0` a režim řídí výhradně
+> přepínač výše.
+
+## Upgrade verze PS (`make ps-upgrade`)
+Aktualizace běžící instalace na **nejnovější verzi v rámci téhož majoru** (PS8 zůstane PS8,
+PS9 zůstane PS9) — **in-place migrace souborů + DB, data zůstávají** (žádný reinstall).
+Stojí na oficiálním modulu **autoupgrade** (Update Assistant), který je součástí instalace
+(doplňuje ho `bin/download` pro PS8/9; **PS 1.7 / ps178 není podporováno**).
+
+**Postup:**
+```bash
+make ps-upgrade PS=ps82      # nebo bez PS= proti DEFAULT_PS
+```
+Příkaz je interaktivní:
+1. vypíše **aktuální verzi** a **nabízené aktualizace**;
+2. k výběru dá **jen same-major** (např. `8.2.6 → 8.2.7`); případnou **major** verzi (9.x)
+   zobrazí, ale **nenabídne** ji — uvidíš, že existuje, ale nikdy ji omylem nespustíš;
+3. po výběru ověří prerekvizity, **udělá zálohu**, dočasně **vypne dev režim** (jinak autoupgrade
+   padá na čištění cache) a spustí upgrade; nemarketplace moduly (vč. `packetery`) nechá
+   zapnuté (`--disable-non-native-modules=0`). Na konci vypíše novou verzi a vrátí původní dev stav.
+
+```
+Aktuální verze (ps82): 8.2.6
+Nabízené aktualizace:
+  [1]  8.2.7     patch   (online_recommended)
+       9.1.4     major   ← přeskok majoru, nenabízím
+Vyber verzi k upgradu [1-1], Enter = konec:
+```
+> Předpoklad: cílová verze **běží** (`make up PS=<tag>`). Když není co upgradovat, příkaz to
+> oznámí a skončí. Enter (prázdná volba) = nic se nezmění.
+
+### Záloha a rollback
+Před upgradem se automaticky vytvoří záloha (soubory + DB) v adresáři
+`src/<tag>/<admin>/autoupgrade/backup/`. **Po upgradu zůstává** (rollback bod; autoupgrade ji
+nemaže — ~90 M na upgrade, mizí až s `make drop`). Seznam záloh:
+```bash
+make au-backups PS=ps82
+```
+**Obnova se dělá podle názvu zálohy přes CLI** (ne ručním rozbalováním):
+```bash
+docker exec -w /var/www/html/modules/autoupgrade ps82 su www-data -s /bin/bash -c \
+  "php bin/console backup:restore admin1234 --backup=<NÁZEV>"
+```
+Logy běhu: `src/<tag>/<admin>/autoupgrade/logs/`. Nouzový reset: `make drop <tag>` + `make up PS=<tag>`.
+
+### Diagnostika (autoupgrade CLI napřímo)
+Read-only dotazy mimo `ps-upgrade` (vyžadují běžící kontejner):
+```bash
+make au-new-version PS=ps82                            # dostupné updaty (Version/Channel/Type)
+make au-requirements PS=ps82 ARGS="--channel=online_recommended"   # prerekvizity
+make au-modules      PS=ps82 ARGS="--channel=online_recommended"   # kompatibilita modulů
+make au-backups      PS=ps82                                       # seznam záloh (rollback body)
+```
 
 ## Modul
 Žije v `modules/prestashop/packetery` (vlastní git repo `Zasilkovna/prestashop`),

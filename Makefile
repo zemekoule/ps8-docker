@@ -5,7 +5,7 @@ export
 
 PS ?= $(DEFAULT_PS)
 
-.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix translations configure carriers api-stage api-prod e2e e2e-install e2e-report
+.PHONY: up build infra down down-all drop status logs shell shell-root mysql php xdebug check fix translations configure carriers api-stage api-prod dev-on dev-off dev-status au-new-version au-requirements au-modules au-backups ps-upgrade e2e e2e-install e2e-report
 
 up:         ; bin/up $(PS)
 configure:  ; bin/configure $(PS) $(ARGS)        # post-install nastavení (fáze 2); ARGS="--dry-run" jen vypíše
@@ -38,6 +38,29 @@ translations: ; docker exec $(PS) php /var/www/dev-tools/extract-missing-transla
 #   make api-stage PS=ps91      # vybraná verze
 api-stage:  ; bin/api-target $(PS) stage
 api-prod:   ; bin/api-target $(PS) prod
+
+# PS dev režim (_PS_MODE_DEV_) — přepínatelný (přes tento make i admin UI; bez restartu).
+#   make dev-on PS=ps82 / make dev-off PS=ps82 / make dev-status PS=ps82
+dev-on:     ; bin/dev $(PS) on
+dev-off:    ; bin/dev $(PS) off
+dev-status: ; bin/dev $(PS) status
+
+# Upgrade modul (autoupgrade) CLI — ad-hoc dotazy k upgradu PS (vyžaduje běžící kontejner;
+# modul je v src/<tag>/modules/autoupgrade pro PS8/9). Admin dir = PS_FOLDER_ADMIN z .env.
+#   make au-new-version                 # dostupné PS updaty pro DEFAULT_PS
+#   make au-requirements PS=ps82 ARGS="--channel=local --zip=… --xml=…"
+#   make au-modules PS=ps82
+au-new-version:  ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console update:check-new-version $(PS_FOLDER_ADMIN) $(ARGS)"
+au-requirements: ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console update:check-requirements $(PS_FOLDER_ADMIN) $(ARGS)"
+au-modules:      ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console update:check-modules $(PS_FOLDER_ADMIN) $(ARGS)"
+# Zálohy autoupgrade (rollback body z ps-upgrade): make au-backups PS=ps82
+au-backups:      ; docker exec -w /var/www/html/modules/autoupgrade $(PS) su www-data -s /bin/bash -c "php bin/console backup:list $(PS_FOLDER_ADMIN) $(ARGS)"
+
+# Upgrade PS na nejnovější verzi v rámci majoru (in-place, data zůstávají). Interaktivní:
+# vypíše aktuální + nabízené verze (major nenabízí), po výběru zazálohuje a provede upgrade.
+#   make ps-upgrade               # DEFAULT_PS
+#   make ps-upgrade PS=ps82
+ps-upgrade: ; bin/ps-upgrade $(PS)
 
 # E2E testy (Playwright) modulu Packeta — běží na hostu pod Node z .nvmrc.
 #   make e2e                      # všechny testy proti DEFAULT_PS
